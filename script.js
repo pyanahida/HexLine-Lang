@@ -26,22 +26,27 @@ function err(line, msg) {
 }
 
 // ---------- parse ----------
+// 在 parse 函数里
 function parse(src) {
   const lines = src.split(/\r?\n/);
-  if (!lines.length || lines[0].trim() !== 'using utf-8')
-    return { err: 'first line must be "using utf-8"' };
+  if (!lines.length || !lines[0].startsWith('using '))
+    return { err: 'first line must be "using <encoding>"' };
+    
+  const encoding = lines[0].slice(6).trim().toLowerCase();
+  const validEncodings = [
+    'utf-8', 'iso-8859-1', 'utf-16le', 'utf-16be', 
+    'utf-32le', 'utf-32be', 'gbk', 'windows-1252'
+  ];
+  if (!validEncodings.includes(encoding)) {
+    return { err: `unsupported encoding: ${encoding}` };
+  }
+
   const prog = [];
   for (let i = 1; i < lines.length; i++) {
-    let line = lines[i];
-    const c = line.indexOf('//');
-    if (c >= 0) line = line.slice(0, c);
-    line = line.trim();
-    if (!line) continue;
-    prog.push({ lineNo: i + 1, text: line });
+    // ... 原有的行解析逻辑
   }
-  return { prog };
+  return { prog, encoding }; // 记得把 encoding 返回出去
 }
-
 // ---------- value ----------
 function isLiteral(t) { return t.startsWith('$'); }
 function parseLiteral(t) {
@@ -108,11 +113,10 @@ function start() {
   $con.textContent = '';
   vars = {}; labels = {}; pc = 0; running = true; pendingInput = null;
 
-  const src = $code.value;
   const res = parse(src);
-  if (res.err) { err(0, res.err); return; }
-  const prog = res.prog;
-
+if (res.err) { err(0, res.err); return; }
+const prog = res.prog;
+const outputEncoding = res.encoding; // 保存当前程序的输出编码
   // collect labels
   for (const ins of prog) {
     const m = ins.text.match(/^label\s+(#[a-zA-Z0-9_]+)$/);
@@ -243,15 +247,27 @@ function start() {
 
     // io
     if (op === 'print') {
-      let s = '';
-      for (let i = 1; i < parts.length; i++) {
-        const v = getVal(parts[i]);
-        if (isNaN(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
-        if (v >= 0 && v <= 255 && Number.isInteger(v)) s += String.fromCharCode(v);
-        else s += '\0';
+  let s = '';
+  for (let i = 1; i < parts.length; i++) {
+    const v = getVal(parts[i]);
+    if (isNaN(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
+    
+    // 如果不在 0-255 范围内或不是整数，输出 NUL
+    if (v < 0 || v > 255 || !Number.isInteger(v)) {
+      s += '\0';
+    } else {
+      // 将单字节值放入 Uint8Array，使用指定的 outputEncoding 解码
+      try {
+        const decoder = new TextDecoder(outputEncoding === 'gbk' ? 'gbk' : outputEncoding, { fatal: false });
+        s += decoder.decode(new Uint8Array([v]));
+      } catch (e) {
+        // 若浏览器不支持该编码的 TextDecoder，则退化为直接转字符
+        s += String.fromCharCode(v);
       }
-      out(s); pc++; return 'ok';
     }
+  }
+  out(s); pc++; return 'ok';
+}
     if (op === 'printnum') {
       let s = '';
       for (let i = 1; i < parts.length; i++) {
