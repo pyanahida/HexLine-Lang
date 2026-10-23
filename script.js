@@ -53,7 +53,7 @@ function parse(src) {
   return { prog, encoding };
 }
 
-// ---------- value ----------
+// ---------- value parsing ----------
 function isLiteral(t) { return t.startsWith('$'); }
 function parseLiteral(t) {
   const s = t.slice(1);
@@ -84,8 +84,34 @@ function getVal(tok) {
   if (tok in vars) return vars[tok];
   return NaN;
 }
+function parseStrLiteral(tok) {
+  if (!tok.startsWith('"') || !tok.endsWith('"')) return null;
+  const inner = tok.slice(1, -1);
+  const bytes = [];
+  for (let i = 0; i < inner.length; i++) {
+    if (inner[i] === '\\') {
+      if (inner[i+1] === '\\') { bytes.push(92); i++; } 
+      else if (inner[i+1] === '"') { bytes.push(34); i++; } 
+      else if (inner[i+1] === 'x' && inner.length >= i + 4) {
+        const hex = inner.slice(i+2, i+4);
+        if (/^[0-9a-fA-F]{2}$/.test(hex)) {
+          bytes.push(parseInt(hex, 16));
+          i += 3;
+        } else {
+          bytes.push(92); 
+        }
+      } else {
+        bytes.push(92);
+      }
+    } else {
+      const encoded = new TextEncoder().encode(inner[i]);
+      for (let b of encoded) bytes.push(b);
+    }
+  }
+  return new Uint8Array(bytes);
+}
 
-// ---------- hex formatting ----------
+// ---------- formatting ----------
 function toHex(n) {
   if (!isFinite(n)) return '0';
   const neg = n < 0;
@@ -194,6 +220,23 @@ function start() {
     return r & m;
   }
 
+  function powComplex(a, b) {
+    if (a === 0 && b <= 0) return { re: NaN, im: NaN, err: true };
+    
+    const r = Math.abs(a);
+    const theta = a >= 0 ? 0 : Math.PI;
+    
+    const lnR = Math.log(r);
+    const x = b * lnR;
+    const y = b * theta;
+    
+    const mag = Math.exp(x);
+    const re = mag * Math.cos(y);
+    const im = mag * Math.sin(y);
+    
+    return { re, im, err: false };
+  }
+
   function exec(ins) {
     const parts = ins.text.split(/\s+/);
     const op = parts[0];
@@ -247,12 +290,17 @@ function start() {
     if (op === 'print') {
       let bytes = [];
       for (let i = 1; i < parts.length; i++) {
-        const v = getVal(parts[i]);
-        if (isNaN(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
-        if (v >= 0 && v <= 255 && Number.isInteger(v)) {
-          bytes.push(v);
+        const tok = parts[i];
+        if (tok in vars && vars[tok] instanceof Uint8Array) {
+          bytes.push(...vars[tok]);
         } else {
-          bytes.push(0);
+          const v = getVal(tok);
+          if (isNaN(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
+          if (v >= 0 && v <= 255 && Number.isInteger(v)) {
+            bytes.push(v);
+          } else {
+            bytes.push(0);
+          }
         }
       }
       try {
@@ -323,6 +371,13 @@ function start() {
       vars[parts[1]] = v; pc++; return 'ok';
     }
 
+    if (op === 'defstr') {
+      const strVal = parseStrLiteral(parts[2]);
+      if (strVal === null) { err(lineNo, 'invalid string literal'); return 'stop'; }
+      vars[parts[1]] = strVal;
+      pc++; return 'ok';
+    }
+
     if (['add', 'sub', 'mul', 'div', 'fdiv'].includes(op)) {
       const a = getVal(parts[1]), b = getVal(parts[2]);
       if (isNaN(a) || isNaN(b)) { err(lineNo, 'invalid operand'); return 'stop'; }
@@ -339,6 +394,35 @@ function start() {
           r = a / b; break;
       }
       vars[parts[1]] = r; pc++; return 'ok';
+    }
+
+    if (['mod', 'fmod'].includes(op)) {
+      const a = getVal(parts[1]), b = getVal(parts[2]);
+      if (isNaN(a) || isNaN(b)) { err(lineNo, 'invalid operand'); return 'stop'; }
+      if (b === 0) { err(lineNo, 'division by zero'); return 'stop'; }
+      
+      if (op === 'mod' && !Number.isInteger(b)) { err(lineNo, 'mod requires integer divisor'); return 'stop'; }
+      
+      let r = Math.abs(a) % Math.abs(b);
+      if ((a < 0 && b > 0) || (a > 0 && b < 0)) {
+        r = -r;
+      }
+      vars[parts[1]] = r; pc++; return 'ok';
+    }
+
+    if (op === 'pow' || op === 'ipow') {
+      const a = getVal(parts[1]), b = getVal(parts[2]);
+      if (isNaN(a) || isNaN(b)) { err(lineNo, 'invalid operand'); return 'stop'; }
+      
+      const res = powComplex(a, b);
+      if (res.err) { err(lineNo, 'math domain error'); return 'stop'; }
+      
+      if (op === 'pow') {
+        vars[parts[1]] = res.re;
+      } else {
+        vars[parts[1]] = res.im;
+      }
+      pc++; return 'ok';
     }
 
     if (op === 'abs' || op === 'floor' || op === 'ceil' || op === 'round') {
