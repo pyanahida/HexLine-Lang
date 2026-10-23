@@ -118,3 +118,29 @@ textarea {
     font-size: 16px;
   }
 }
+
+/* Select 控件的基础样式，保持与其他控件统一 */
+select {
+  padding: 8px 16px;
+  font-family: monospace;
+  font-size: 14px;
+  background: #2a2a2a;
+  color: #ddd;
+  border: 1px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+select:focus {
+  outline: 1px solid #555;
+}
+
+/* 窄屏适配中追加 select */
+@media (max-width: 480px) {
+  .toolbar select {
+    width: 100%;
+    padding: 12px;
+    font-size: 16px;
+  }
+}
