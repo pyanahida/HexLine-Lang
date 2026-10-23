@@ -1,6 +1,7 @@
 // ---------- state ----------
 let pc = 0, tokens = [], vars = {}, labels = {}, outputs = [], running = false;
-let pendingInput = null; // {resolve, varName}
+let pendingInput = null;
+let currentEncoding = 'utf-8';
 
 const $file = document.getElementById('fileInput');
 const $run = document.getElementById('runBtn');
@@ -26,7 +27,6 @@ function err(line, msg) {
 }
 
 // ---------- parse ----------
-// 在 parse 函数里
 function parse(src) {
   const lines = src.split(/\r?\n/);
   if (!lines.length || !lines[0].startsWith('using '))
@@ -43,27 +43,30 @@ function parse(src) {
 
   const prog = [];
   for (let i = 1; i < lines.length; i++) {
-    // ... 原有的行解析逻辑
+    let line = lines[i];
+    const c = line.indexOf('//');
+    if (c >= 0) line = line.slice(0, c);
+    line = line.trim();
+    if (!line) continue;
+    prog.push({ lineNo: i + 1, text: line });
   }
-  return { prog, encoding }; // 记得把 encoding 返回出去
+  return { prog, encoding };
 }
+
 // ---------- value ----------
 function isLiteral(t) { return t.startsWith('$'); }
 function parseLiteral(t) {
-  // $ -> 0x, support hex fraction
   const s = t.slice(1);
   if (s === '') return NaN;
   const neg = s.startsWith('-');
   const body = neg ? s.slice(1) : s;
   const parts = body.split('.');
   let val = 0;
-  // integer part
   for (let i = 0; i < parts[0].length; i++) {
     const d = parseInt(parts[0][i], 16);
     if (isNaN(d)) return NaN;
     val = val * 16 + d;
   }
-  // fraction
   if (parts[1]) {
     let f = 0, scale = 1;
     for (let i = 0; i < parts[1].length; i++) {
@@ -113,17 +116,17 @@ function start() {
   $con.textContent = '';
   vars = {}; labels = {}; pc = 0; running = true; pendingInput = null;
 
+  const src = $code.value;
   const res = parse(src);
-if (res.err) { err(0, res.err); return; }
-const prog = res.prog;
-const outputEncoding = res.encoding; // 保存当前程序的输出编码
-  // collect labels
+  if (res.err) { err(0, res.err); return; }
+  const prog = res.prog;
+  currentEncoding = res.encoding;
+
   for (const ins of prog) {
     const m = ins.text.match(/^label\s+(#[a-zA-Z0-9_]+)$/);
     if (m) labels[m[1]] = prog.indexOf(ins);
   }
 
-  // build structure: find matching endif/endwhile
   const match = buildMatches(prog);
   if (match.err) { err(match.err.line, match.err.msg); return; }
 
@@ -160,7 +163,6 @@ const outputEncoding = res.encoding; // 保存当前程序的输出编码
   }
 
   function truncateForBitwise(n) {
-    // remove fraction, take abs for negatives
     const t = Math.trunc(n);
     return t < 0 ? -t : t;
   }
@@ -197,7 +199,6 @@ const outputEncoding = res.encoding; // 保存当前程序的输出编码
     const op = parts[0];
     const lineNo = ins.lineNo;
 
-    // control flow
     if (/^if-(eq|ne|gt|ge|lt|le)$/.test(op)) {
       const a = getVal(parts[1]), b = getVal(parts[2]);
       if (isNaN(a) || isNaN(b)) { err(lineNo, 'invalid operand'); return 'stop'; }
@@ -213,7 +214,6 @@ const outputEncoding = res.encoding; // 保存当前程序的输出编码
       pc++; return 'ok';
     }
     if (op === 'endwhile') {
-      // find matching while start
       let start = -1;
       for (const k in match) if (match[k] === pc) { start = parseInt(k); break; }
       pc = start; return 'jumped';
@@ -237,7 +237,6 @@ const outputEncoding = res.encoding; // 保存当前程序的输出编码
       pc = i; return 'jumped';
     }
 
-    // label/goto
     if (op === 'label') { pc++; return 'ok'; }
     if (op === 'goto') {
       const target = labels[parts[1]];
@@ -245,29 +244,25 @@ const outputEncoding = res.encoding; // 保存当前程序的输出编码
       pc = target; return 'jumped';
     }
 
-    // io
     if (op === 'print') {
-  let s = '';
-  for (let i = 1; i < parts.length; i++) {
-    const v = getVal(parts[i]);
-    if (isNaN(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
-    
-    // 如果不在 0-255 范围内或不是整数，输出 NUL
-    if (v < 0 || v > 255 || !Number.isInteger(v)) {
-      s += '\0';
-    } else {
-      // 将单字节值放入 Uint8Array，使用指定的 outputEncoding 解码
-      try {
-        const decoder = new TextDecoder(outputEncoding === 'gbk' ? 'gbk' : outputEncoding, { fatal: false });
-        s += decoder.decode(new Uint8Array([v]));
-      } catch (e) {
-        // 若浏览器不支持该编码的 TextDecoder，则退化为直接转字符
-        s += String.fromCharCode(v);
+      let bytes = [];
+      for (let i = 1; i < parts.length; i++) {
+        const v = getVal(parts[i]);
+        if (isNaN(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
+        if (v >= 0 && v <= 255 && Number.isInteger(v)) {
+          bytes.push(v);
+        } else {
+          bytes.push(0);
+        }
       }
+      try {
+        const decoder = new TextDecoder(currentEncoding, { fatal: false });
+        out(decoder.decode(new Uint8Array(bytes)));
+      } catch (e) {
+        out(String.fromCharCode(...bytes));
+      }
+      pc++; return 'ok';
     }
-  }
-  out(s); pc++; return 'ok';
-}
     if (op === 'printnum') {
       let s = '';
       for (let i = 1; i < parts.length; i++) {
@@ -287,54 +282,47 @@ const outputEncoding = res.encoding; // 保存当前程序的输出编码
       out(s); pc++; return 'ok';
     }
     if (op === 'input') {
-  pc++;
-  pendingInput = { varName: parts[1], lineNo };
-  
-  // 动态创建输入框适配移动端软键盘
-  const inputEl = document.createElement('input');
-  inputEl.type = 'text';
-  inputEl.style.width = '40px';
-  inputEl.style.marginLeft = '4px';
-  inputEl.style.background = '#000';
-  inputEl.style.color = '#ddd';
-  inputEl.style.border = 'none';
-  inputEl.style.outline = 'none';
-  inputEl.style.fontFamily = 'monospace';
-  inputEl.style.fontSize = '14px';
-  inputEl.style.caretColor = '#ddd';
-  
-  $con.appendChild(inputEl);
-  inputEl.focus();
-  
-  // 使用 input 事件代替 keydown，兼容手机端输入法
-  inputEl.addEventListener('input', (e) => {
-    const val = e.target.value;
-    if (!val) return; // 等待有效字符
-    
-    // 取 UTF-8 首字节
-    const bytes = new TextEncoder().encode(val);
-    vars[pendingInput.varName] = bytes[0];
-    
-    // 清理输入状态和 DOM
-    pendingInput = null;
-    inputEl.remove();
-    $con.focus(); // 收回焦点，防止手机键盘阻挡后续输出
-    
-    // 恢复执行
-    runLoop(prog, match);
-  });
-  
-  return 'pause';
-}
+      pc++;
+      pendingInput = { varName: parts[1], lineNo };
+      
+      const inputEl = document.createElement('input');
+      inputEl.type = 'text';
+      inputEl.style.width = '40px';
+      inputEl.style.marginLeft = '4px';
+      inputEl.style.background = '#000';
+      inputEl.style.color = '#ddd';
+      inputEl.style.border = 'none';
+      inputEl.style.outline = 'none';
+      inputEl.style.fontFamily = 'monospace';
+      inputEl.style.fontSize = '14px';
+      inputEl.style.caretColor = '#ddd';
+      
+      $con.appendChild(inputEl);
+      inputEl.focus();
+      
+      inputEl.addEventListener('input', (e) => {
+        const val = e.target.value;
+        if (!val) return;
+        
+        const bytes = new TextEncoder().encode(val);
+        vars[pendingInput.varName] = bytes[0];
+        
+        pendingInput = null;
+        inputEl.remove();
+        $con.focus();
+        
+        runLoop(prog, match);
+      });
+      
+      return 'pause';
+    }
 
-    // vars
     if (op === 'def') {
       const v = getVal(parts[2]);
       if (isNaN(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
       vars[parts[1]] = v; pc++; return 'ok';
     }
 
-    // arithmetic
     if (['add', 'sub', 'mul', 'div', 'fdiv'].includes(op)) {
       const a = getVal(parts[1]), b = getVal(parts[2]);
       if (isNaN(a) || isNaN(b)) { err(lineNo, 'invalid operand'); return 'stop'; }
@@ -366,7 +354,6 @@ const outputEncoding = res.encoding; // 保存当前程序的输出编码
       vars[parts[1]] = r; pc++; return 'ok';
     }
 
-    // bitwise
     if (['and', 'or', 'nand', 'nor', 'xor', 'nxor'].includes(op)) {
       const a = getVal(parts[1]), b = getVal(parts[2]);
       if (isNaN(a) || isNaN(b)) { err(lineNo, 'invalid operand'); return 'stop'; }
@@ -389,7 +376,7 @@ const outputEncoding = res.encoding; // 保存当前程序的输出编码
     while (running && pc < prog.length) {
       const r = exec(prog[pc]);
       if (r === 'stop') { running = false; return; }
-      if (r === 'pause') { return; } // wait for input
+      if (r === 'pause') { return; }
     }
     running = false;
   }
@@ -400,14 +387,12 @@ async function loadExamples() {
   try {
     let apiUrl = '';
     
-    // 仅在 GitHub Pages 环境下通过 API 自动推导路径并遍历
     if (location.hostname.includes('github.io')) {
       const user = location.hostname.split('.')[0];
       const repo = location.pathname.split('/')[1];
       apiUrl = `https://api.github.com/repos/${user}/${repo}/contents/example`;
     }
 
-    // 如果不在 GitHub Pages，或者推导失败，直接静默返回，保留空 select
     if (!apiUrl) return;
 
     const res = await fetch(apiUrl);
@@ -415,11 +400,9 @@ async function loadExamples() {
     
     const files = await res.json();
     
-    // 过滤出文件类型且后缀为 .hxl 的文件
     if (Array.isArray(files)) {
       const hxlFiles = files.filter(f => f.name.endsWith('.hxl') && f.type === 'file');
       
-      // 动态生成 option 并插入
       hxlFiles.forEach(file => {
         const opt = document.createElement('option');
         opt.value = file.download_url; 
@@ -428,7 +411,6 @@ async function loadExamples() {
       });
     }
   } catch (e) {
-    // 目录不存在或请求失败时，容错处理，保持默认状态
     console.log('No examples found.');
   }
 }
