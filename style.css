@@ -1,0 +1,6 @@
+body { font-family: monospace; margin: 16px; background: #111; color: #ddd; }
+h1 { font-size: 18px; }
+.toolbar { display: flex; gap: 8px; margin-bottom: 8px; }
+textarea { width: 100%; height: 260px; background: #1b1b1b; color: #ddd; border: 1px solid #444; padding: 8px; font-family: monospace; }
+.console { margin-top: 8px; min-height: 120px; background: #000; border: 1px solid #444; padding: 8px; white-space: pre-wrap; }
+.err { color: #f55; }
