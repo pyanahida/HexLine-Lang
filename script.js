@@ -271,10 +271,45 @@ function start() {
       out(s); pc++; return 'ok';
     }
     if (op === 'input') {
-      pc++;
-      pendingInput = { varName: parts[1], lineNo };
-      return 'pause';
-    }
+  pc++;
+  pendingInput = { varName: parts[1], lineNo };
+  
+  // 动态创建输入框适配移动端软键盘
+  const inputEl = document.createElement('input');
+  inputEl.type = 'text';
+  inputEl.style.width = '40px';
+  inputEl.style.marginLeft = '4px';
+  inputEl.style.background = '#000';
+  inputEl.style.color = '#ddd';
+  inputEl.style.border = 'none';
+  inputEl.style.outline = 'none';
+  inputEl.style.fontFamily = 'monospace';
+  inputEl.style.fontSize = '14px';
+  inputEl.style.caretColor = '#ddd';
+  
+  $con.appendChild(inputEl);
+  inputEl.focus();
+  
+  // 使用 input 事件代替 keydown，兼容手机端输入法
+  inputEl.addEventListener('input', (e) => {
+    const val = e.target.value;
+    if (!val) return; // 等待有效字符
+    
+    // 取 UTF-8 首字节
+    const bytes = new TextEncoder().encode(val);
+    vars[pendingInput.varName] = bytes[0];
+    
+    // 清理输入状态和 DOM
+    pendingInput = null;
+    inputEl.remove();
+    $con.focus(); // 收回焦点，防止手机键盘阻挡后续输出
+    
+    // 恢复执行
+    runLoop(prog, match);
+  });
+  
+  return 'pause';
+}
 
     // vars
     if (op === 'def') {
