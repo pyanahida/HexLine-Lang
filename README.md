@@ -1,6 +1,6 @@
 # Hexline
 
-A tiny language created on 2026-10-22. One operation per line. The compiler is a single HTML page.
+A tiny language created on 2026-10-23. One operation per line. The compiler is a single HTML page.
 
 ## Files
 - `index.html` — UI: file picker, examples dropdown, code box, run button, console
