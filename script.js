@@ -6,6 +6,7 @@ const $file = document.getElementById('fileInput');
 const $run = document.getElementById('runBtn');
 const $code = document.getElementById('codeBox');
 const $con = document.getElementById('console');
+const $exampleSelect = document.getElementById('exampleSelect');
 
 $file.addEventListener('change', e => {
   const f = e.target.files[0];
@@ -360,3 +361,60 @@ function start() {
     }
   };
 }
+
+// 动态获取 example 目录下的 .hxl 文件并生成下拉选项
+async function loadExamples() {
+  try {
+    let apiUrl = '';
+    
+    // 仅在 GitHub Pages 环境下通过 API 自动推导路径并遍历
+    if (location.hostname.includes('github.io')) {
+      const user = location.hostname.split('.')[0];
+      const repo = location.pathname.split('/')[1];
+      apiUrl = `https://api.github.com/repos/${user}/${repo}/contents/example`;
+    }
+
+    // 如果不在 GitHub Pages，或者推导失败，直接静默返回，保留空 select
+    if (!apiUrl) return;
+
+    const res = await fetch(apiUrl);
+    if (!res.ok) throw new Error('Directory not found');
+    
+    const files = await res.json();
+    
+    // 过滤出文件类型且后缀为 .hxl 的文件
+    if (Array.isArray(files)) {
+      const hxlFiles = files.filter(f => f.name.endsWith('.hxl') && f.type === 'file');
+      
+      // 动态生成 option 并插入
+      hxlFiles.forEach(file => {
+        const opt = document.createElement('option');
+        opt.value = file.download_url; 
+        opt.textContent = file.name;
+        $exampleSelect.appendChild(opt);
+      });
+    }
+  } catch (e) {
+    // 目录不存在或请求失败时，容错处理，保持默认状态
+    console.log('No examples found.');
+  }
+}
+
+loadExamples();
+
+// 监听下拉框变化，加载对应的代码到文本框
+$exampleSelect.addEventListener('change', async (e) => {
+  const url = e.target.value;
+  if (!url) return;
+  
+  try {
+    const res = await fetch(url);
+    if (res.ok) {
+      $code.value = await res.text();
+    } else {
+      alert('Failed to load example file.');
+    }
+  } catch (err) {
+    alert('Error loading example.');
+  }
+});
