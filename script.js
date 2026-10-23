@@ -377,24 +377,6 @@ function start() {
     }
     running = false;
   }
-
-  // input handling: a hidden prompt via keyboard on console
-  // when pendingInput set, wait for one keydown, take utf-8 first byte
-  $con.tabIndex = 0;
-  $con.focus();
-  $con.onkeydown = (e) => {
-    if (!pendingInput) return;
-    const ch = e.key;
-    if (ch.length === 1) {
-      e.preventDefault();
-      const bytes = new TextEncoder().encode(ch);
-      vars[pendingInput.varName] = bytes[0];
-      const p = pendingInput; pendingInput = null;
-      const savedPC = pc;
-      pc = savedPC;
-      runLoop(prog, match);
-    }
-  };
 }
 
 // 动态获取 example 目录下的 .hxl 文件并生成下拉选项
