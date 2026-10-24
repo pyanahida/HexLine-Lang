@@ -6,9 +6,9 @@ let currentMatch = {};
 let useDegrees = false; 
 let areaStack = []; 
 
-// 预计算 PI 和 E 的十六进制字符串，保留 32 位
-const PI_HEX = Math.PI.toString(16);
-const E_HEX = Math.E.toString(16);
+// mpmath 算出的 64 位十六进制常量
+const PI_HEX = "3.243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C8";
+const E_HEX = "2.B7E151628AED2A6ABF7158809CF4F3C762E7160F38B4DA56A784D9045190CFE";
 
 function parse(src) {
   const lines = src.split(/\r?\n/);
@@ -503,9 +503,7 @@ function exec(ins) {
     const a = getVal(parts[1]), b = getVal(parts[2]);
     if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
     
-    // 符号处理：同号为正，异号为负
     let resSign = (a.sign === b.sign) ? 1 : -1;
-    
     let strA = a.abs().toString();
     let strB = b.abs().toString();
     
