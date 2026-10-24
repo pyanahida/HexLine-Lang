@@ -26,6 +26,370 @@ function err(line, msg) {
   running = false;
 }
 
+// ==========================================
+// BigHex: Arbitrary Precision Hex Float Engine
+// ==========================================
+class BigHex {
+  constructor(val) {
+    this.int = []; // array of nibbles (0-15), most significant first
+    this.frac = []; // array of nibbles (0-15)
+    this.sign = 1; // 1 or -1
+    
+    if (val !== undefined) {
+      if (val instanceof BigHex) {
+        this.int = [...val.int];
+        this.frac = [...val.frac];
+        this.sign = val.sign;
+      } else if (typeof val === 'number') {
+        this.fromNumber(val);
+      } else if (typeof val === 'string') {
+        this.fromString(val);
+      }
+    }
+    if (this.int.length === 0) this.int.push(0);
+    this.normalize();
+  }
+
+  fromNumber(n) {
+    if (isNaN(n)) { this.int = [0]; return; }
+    if (n < 0) { this.sign = -1; n = -n; }
+    if (n === 0) { this.int = [0]; return; }
+    
+    let s = n.toString(16);
+    let parts = s.split('.');
+    this.fromString(parts[0] + (parts[1] ? '.' + parts[1] : ''));
+  }
+
+  fromString(s) {
+    this.int = []; this.frac = []; this.sign = 1;
+    if (s.startsWith('-')) { this.sign = -1; s = s.slice(1); }
+    const parts = s.split('.');
+    const intStr = parts[0] || '0';
+    const fracStr = parts[1] || '';
+
+    for (let i = 0; i < intStr.length; i++) {
+      let d = parseInt(intStr[i], 16);
+      if (isNaN(d)) throw new Error('Invalid hex');
+      this.int.push(d);
+    }
+    for (let i = 0; i < fracStr.length; i++) {
+      let d = parseInt(fracStr[i], 16);
+      if (isNaN(d)) throw new Error('Invalid hex');
+      this.frac.push(d);
+    }
+    this.normalize();
+  }
+
+  normalize() {
+    while (this.int.length > 1 && this.int[0] === 0) this.int.shift();
+    while (this.frac.length > 0 && this.frac[this.frac.length - 1] === 0) this.frac.pop();
+    if (this.isZero()) this.sign = 1;
+  }
+
+  isZero() {
+    return this.int.length === 1 && this.int[0] === 0 && this.frac.length === 0;
+  }
+
+  toString() {
+    let ip = this.int.map(d => d.toString(16).toUpperCase()).join('');
+    let fp = this.frac.map(d => d.toString(16).toUpperCase()).join('');
+    let res = ip + (fp ? '.' + fp : '');
+    return (this.sign === -1 && !this.isZero() ? '-' : '') + res;
+  }
+
+  clone() { return new BigHex(this); }
+
+  neg() {
+    let r = this.clone();
+    if (!r.isZero()) r.sign *= -1;
+    return r;
+  }
+
+  abs() {
+    let r = this.clone();
+    r.sign = 1;
+    return r;
+  }
+
+  // --- Core Arithmetic Helpers ---
+
+  align(a, b) {
+    // Return { ai, af, bi, bf } with aligned fractional lengths
+    const fLen = Math.max(a.frac.length, b.frac.length);
+    const ai = [...a.int], af = [...a.frac];
+    const bi = [...b.int], bf = [...b.frac];
+    while (af.length < fLen) af.push(0);
+    while (bf.length < fLen) bf.push(0);
+    return { ai, af, bi, bf };
+  }
+
+  static addAbs(a, b) {
+    let { ai, af, bi, bf } = a.align(b);
+    let carry = 0;
+    let rf = [];
+    for (let i = af.length - 1; i >= 0; i--) {
+      let sum = af[i] + bf[i] + carry;
+      rf.unshift(sum % 16);
+      carry = Math.floor(sum / 16);
+    }
+    let ri = [];
+    let maxI = Math.max(ai.length, bi.length);
+    for (let i = 0; i < maxI; i++) {
+      let ad = ai[ai.length - 1 - i] || 0;
+      let bd = bi[bi.length - 1 - i] || 0;
+      let sum = ad + bd + carry;
+      ri.unshift(sum % 16);
+      carry = Math.floor(sum / 16);
+    }
+    if (carry > 0) ri.unshift(carry);
+    
+    let r = new BigHex();
+    r.int = ri; r.frac = rf;
+    r.normalize();
+    return r;
+  }
+
+  static cmpAbs(a, b) {
+    if (a.int.length !== b.int.length) return a.int.length > b.int.length ? 1 : -1;
+    for (let i = 0; i < a.int.length; i++) {
+      if (a.int[i] !== b.int[i]) return a.int[i] > b.int[i] ? 1 : -1;
+    }
+    const fLen = Math.max(a.frac.length, b.frac.length);
+    for (let i = 0; i < fLen; i++) {
+      let ad = a.frac[i] || 0;
+      let bd = b.frac[i] || 0;
+      if (ad !== bd) return ad > bd ? 1 : -1;
+    }
+    return 0;
+  }
+
+  static subAbs(a, b) {
+    // Assumes |a| >= |b|
+    let { ai, af, bi, bf } = a.align(b);
+    let rf = [];
+    let borrow = 0;
+    for (let i = af.length - 1; i >= 0; i--) {
+      let diff = af[i] - bf[i] - borrow;
+      if (diff < 0) { diff += 16; borrow = 1; } else { borrow = 0; }
+      rf.unshift(diff);
+    }
+    let ri = [];
+    let maxI = Math.max(ai.length, bi.length);
+    for (let i = 0; i < maxI; i++) {
+      let ad = ai[ai.length - 1 - i] || 0;
+      let bd = bi[bi.length - 1 - i] || 0;
+      let diff = ad - bd - borrow;
+      if (diff < 0) { diff += 16; borrow = 1; } else { borrow = 0; }
+      ri.unshift(diff);
+    }
+    
+    let r = new BigHex();
+    r.int = ri; r.frac = rf;
+    r.normalize();
+    return r;
+  }
+
+  add(o) {
+    if (this.sign === o.sign) {
+      let r = BigHex.addAbs(this, o);
+      r.sign = this.sign;
+      return r;
+    } else {
+      let c = BigHex.cmpAbs(this, o);
+      if (c === 0) return new BigHex(0);
+      if (c > 0) {
+        let r = BigHex.subAbs(this, o);
+        r.sign = this.sign;
+        return r;
+      } else {
+        let r = BigHex.subAbs(o, this);
+        r.sign = o.sign;
+        return r;
+      }
+    }
+  }
+
+  sub(o) {
+    return this.add(o.neg());
+  }
+
+  mul(o) {
+    if (this.isZero() || o.isZero()) return new BigHex(0);
+    let A = [...this.int, ...this.frac];
+    let B = [...o.int, ...o.frac];
+    let fShift = this.frac.length + o.frac.length;
+    let R = new Array(A.length + B.length).fill(0);
+
+    for (let i = A.length - 1; i >= 0; i--) {
+      for (let j = B.length - 1; j >= 0; j--) {
+        let prod = A[i] * B[j] + R[i + j + 1];
+        R[i + j + 1] = prod % 16;
+        R[i + j] += Math.floor(prod / 16);
+      }
+    }
+
+    let r = new BigHex();
+    for (let i = 0; i < fShift; i++) r.frac.unshift(R.pop());
+    r.int = R;
+    r.sign = this.sign * o.sign;
+    r.normalize();
+    return r;
+  }
+
+  div(o) {
+    if (o.isZero()) throw new Error('division by zero');
+    if (this.isZero()) return new BigHex(0);
+
+    let q = new BigHex();
+    let r = new BigHex();
+    
+    // Integer division
+    let A = this.int;
+    let B = o.int;
+    r.int = [0];
+    
+    let isFirst = true;
+    for (let i = 0; i < A.length; i++) {
+      r = r.mul(new BigHex(16));
+      let nextDigit = new BigHex(A[i]);
+      r = r.add(nextDigit);
+      
+      let d = 0;
+      let B_abs = new BigHex(); B_abs.int = B; 
+      
+      while (BigHex.cmpAbs(r, B_abs) >= 0) {
+        r = BigHex.subAbs(r, B_abs);
+        d++;
+      }
+      if (!isFirst || d > 0) {
+        q.int.push(d);
+        isFirst = false;
+      }
+    }
+    if (q.int.length === 0) q.int = [0];
+
+    // Fraction division
+    for (let iter = 0; iter < 64; iter++) {
+      r = r.mul(new BigHex(16));
+      let d = 0;
+      let B_abs = new BigHex(); B_abs.int = B; 
+      while (BigHex.cmpAbs(r, B_abs) >= 0) {
+        r = BigHex.subAbs(r, B_abs);
+        d++;
+      }
+      q.frac.push(d);
+      if (r.isZero()) break;
+    }
+    
+    q.sign = this.sign * o.sign;
+    q.normalize();
+    return q;
+  }
+
+  // --- Math Functions ---
+  
+  isInteger() { return this.frac.length === 0; }
+  
+  toNumber() {
+    let s = this.toString();
+    let parts = s.split('.');
+    let ip = parseInt(parts[0], 16) || 0;
+    let fp = parts[1] ? parseInt(parts[1], 16) / Math.pow(16, parts[1].length) : 0;
+    return (ip + fp) * this.sign;
+  }
+
+  floor() {
+    if (this.sign > 0) return new BigHex(this.int.map(d => d.toString(16)).join(''));
+    if (this.isInteger()) return this.clone();
+    let r = new BigHex(this.int.map(d => d.toString(16)).join(''));
+    r = r.add(new BigHex(1));
+    r.sign = -1;
+    return r;
+  }
+
+  ceil() {
+    if (this.sign > 0) {
+      if (this.isInteger()) return this.clone();
+      let r = new BigHex(this.int.map(d => d.toString(16)).join(''));
+      return r.add(new BigHex(1));
+    }
+    return new BigHex(this.int.map(d => d.toString(16)).join(''));
+  }
+
+  round() {
+    if (this.isInteger()) return this.clone();
+    let fl = this.floor();
+    let ce = this.ceil();
+    let diffFl = this.abs().sub(fl.abs());
+    let diffCe = ce.abs().sub(this.abs());
+    if (diffFl.sub(diffCe).sign >= 0) return ce;
+    return fl;
+  }
+  
+  mod(o) {
+    if (o.isZero()) throw new Error('division by zero');
+    if (this.isZero()) return new BigHex(0);
+    let q = this.div(o).floor();
+    return this.sub(q.mul(o));
+  }
+  
+  fmod(o) {
+    if (o.isZero()) throw new Error('division by zero');
+    if (this.isZero()) return new BigHex(0);
+    let q = this.div(o);
+    q.frac = []; // trunc
+    return this.sub(q.mul(o));
+  }
+
+  pow(o) {
+    let oNum = o.toNumber();
+    if (oNum === 0) {
+      if (this.isZero()) throw new Error('0^0 undefined');
+      return new BigHex(1);
+    }
+    if (this.isZero()) {
+      if (oNum < 0) throw new Error('0^negative undefined');
+      return new BigHex(0);
+    }
+    if (this.sign < 0 && !o.isInteger()) throw new Error('Complex result');
+    
+    if (o.isInteger()) {
+      let exp = o.toNumber();
+      let base = this.clone();
+      let res = new BigHex(1);
+      let isNeg = exp < 0;
+      exp = Math.abs(exp);
+      for (let i = 0; i < exp; i++) res = res.mul(base);
+      if (isNeg) return new BigHex(1).div(res);
+      return res;
+    }
+    
+    // Fractional power (requires ln/exp, which are hard in hex, so we fallback to JS)
+    let bNum = this.toNumber();
+    let rNum = Math.pow(bNum, oNum);
+    if (isNaN(rNum)) throw new Error('Math error');
+    return new BigHex(rNum.toString(16));
+  }
+  
+  ipow(o) {
+    let oNum = o.toNumber();
+    if (this.sign < 0 && !o.isInteger()) {
+      // Complex calculation (a+bi)^b
+      let a = this.toNumber();
+      let r = Math.abs(a);
+      let theta = Math.PI;
+      let lnR = Math.log(r);
+      let x = oNum * lnR;
+      let y = oNum * theta;
+      let mag = Math.exp(x);
+      let im = mag * Math.sin(y);
+      return new BigHex(im.toString(16));
+    }
+    return new BigHex(0);
+  }
+}
+
+
 // ---------- parse ----------
 function parse(src) {
   const lines = src.split(/\r?\n/);
@@ -56,33 +420,12 @@ function parse(src) {
 // ---------- value parsing ----------
 function isLiteral(t) { return t.startsWith('$'); }
 function parseLiteral(t) {
-  const s = t.slice(1);
-  if (s === '') return NaN;
-  const neg = s.startsWith('-');
-  const body = neg ? s.slice(1) : s;
-  const parts = body.split('.');
-  let val = 0;
-  for (let i = 0; i < parts[0].length; i++) {
-    const d = parseInt(parts[0][i], 16);
-    if (isNaN(d)) return NaN;
-    val = val * 16 + d;
-  }
-  if (parts[1]) {
-    let f = 0, scale = 1;
-    for (let i = 0; i < parts[1].length; i++) {
-      const d = parseInt(parts[1][i], 16);
-      if (isNaN(d)) return NaN;
-      scale /= 16;
-      f += d * scale;
-    }
-    val += f;
-  }
-  return neg ? -val : val;
+  return new BigHex(t.slice(1));
 }
 function getVal(tok) {
   if (isLiteral(tok)) return parseLiteral(tok);
   if (tok in vars) return vars[tok];
-  return NaN;
+  return null;
 }
 function parseStrLiteral(tok) {
   if (!tok.startsWith('"') || !tok.endsWith('"')) return null;
@@ -109,32 +452,6 @@ function parseStrLiteral(tok) {
     }
   }
   return new Uint8Array(bytes);
-}
-
-// ---------- formatting ----------
-function toHex(n) {
-  if (!isFinite(n)) return '0';
-  const neg = n < 0;
-  n = Math.abs(n);
-  const intPart = Math.floor(n);
-  let frac = n - intPart;
-  let ip = intPart.toString(16).toUpperCase();
-  let fp = '';
-  if (frac > 0) {
-    let count = 0;
-    while (frac > 0 && count < 20) {
-      frac *= 16;
-      const d = Math.floor(frac);
-      fp += d.toString(16).toUpperCase();
-      frac -= d;
-      count++;
-    }
-  }
-  return (neg ? '-' : '') + ip + (fp ? '.' + fp : '');
-}
-function toDec(n) {
-  if (!isFinite(n)) return '0';
-  return String(n);
 }
 
 // ---------- interpreter ----------
@@ -178,36 +495,31 @@ function start() {
   }
 
   function cmp(op, a, b) {
+    let c = BigHex.cmpAbs(a, b);
+    if (a.sign !== b.sign) c = a.sign > b.sign ? 1 : -1;
+    else if (a.sign < 0) c = -c; // both negative, reverse
+    
     switch (op) {
-      case 'eq': return a === b;
-      case 'ne': return a !== b;
-      case 'gt': return a > b;
-      case 'ge': return a >= b;
-      case 'lt': return a < b;
-      case 'le': return a <= b;
+      case 'eq': return c === 0;
+      case 'ne': return c !== 0;
+      case 'gt': return c > 0;
+      case 'ge': return c >= 0;
+      case 'lt': return c < 0;
+      case 'le': return c <= 0;
     }
   }
 
-  function truncateForBitwise(n) {
-    const t = Math.trunc(n);
-    return t < 0 ? -t : t;
+  function toIntNum(bh) {
+    return Math.trunc(bh.toNumber());
   }
-  function bitWidth(...ns) {
-    let w = 1;
-    for (const n of ns) {
-      const v = Math.abs(Math.trunc(n));
-      if (v === 0) continue;
-      w = Math.max(w, Math.floor(Math.log2(v)) + 1);
-    }
-    return w;
-  }
-  function maskFor(w) { return w >= 53 ? Number.MAX_SAFE_INTEGER : (2 ** w - 1); }
 
   function bitwise2(op, a, b) {
-    a = truncateForBitwise(a); b = truncateForBitwise(b);
-    const w = bitWidth(a, b);
-    const m = maskFor(w);
-    const A = a & m, B = b & m;
+    a = a.abs().floor(); b = b.abs().floor();
+    const an = a.toNumber(); const bn = b.toNumber();
+    const w = Math.max(1, Math.floor(Math.log2(an || 1)) + 1, Math.floor(Math.log2(bn || 1)) + 1);
+    
+    const A = Number(BigInt(an) & BigInt((1n << BigInt(w)) - 1n));
+    const B = Number(BigInt(bn) & BigInt((1n << BigInt(w)) - 1n));
     let r;
     switch (op) {
       case 'and': r = A & B; break;
@@ -217,24 +529,7 @@ function start() {
       case 'nor': r = A | (~B); break;
       case 'nxor': r = A ^ (~B); break;
     }
-    return r & m;
-  }
-
-  function powComplex(a, b) {
-    if (a === 0 && b <= 0) return { re: NaN, im: NaN, err: true };
-    
-    const r = Math.abs(a);
-    const theta = a >= 0 ? 0 : Math.PI;
-    
-    const lnR = Math.log(r);
-    const x = b * lnR;
-    const y = b * theta;
-    
-    const mag = Math.exp(x);
-    const re = mag * Math.cos(y);
-    const im = mag * Math.sin(y);
-    
-    return { re, im, err: false };
+    return new BigHex(r);
   }
 
   function exec(ins) {
@@ -244,7 +539,7 @@ function start() {
 
     if (/^if-(eq|ne|gt|ge|lt|le)$/.test(op)) {
       const a = getVal(parts[1]), b = getVal(parts[2]);
-      if (isNaN(a) || isNaN(b)) { err(lineNo, 'invalid operand'); return 'stop'; }
+      if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
       if (!cmp(op.slice(3), a, b)) { pc = match[pc] + 1; return 'jumped'; }
       pc++; return 'ok';
     }
@@ -252,7 +547,7 @@ function start() {
 
     if (/^while-(eq|ne|gt|ge|lt|le)$/.test(op)) {
       const a = getVal(parts[1]), b = getVal(parts[2]);
-      if (isNaN(a) || isNaN(b)) { err(lineNo, 'invalid operand'); return 'stop'; }
+      if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
       if (!cmp(op.slice(6), a, b)) { pc = match[pc] + 1; return 'jumped'; }
       pc++; return 'ok';
     }
@@ -295,9 +590,12 @@ function start() {
           bytes.push(...vars[tok]);
         } else {
           const v = getVal(tok);
-          if (isNaN(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
-          if (v >= 0 && v <= 255 && Number.isInteger(v)) {
-            bytes.push(v);
+          if (!v || v instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+          
+          if (v.isInteger() && v.sign > 0) {
+            let num = v.toNumber();
+            if (num >= 0 && num <= 255) bytes.push(num);
+            else bytes.push(0);
           } else {
             bytes.push(0);
           }
@@ -315,8 +613,8 @@ function start() {
       let s = '';
       for (let i = 1; i < parts.length; i++) {
         const v = getVal(parts[i]);
-        if (isNaN(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
-        s += toHex(v);
+        if (!v || v instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+        s += v.toString();
       }
       out(s); pc++; return 'ok';
     }
@@ -324,8 +622,8 @@ function start() {
       let s = '';
       for (let i = 1; i < parts.length; i++) {
         const v = getVal(parts[i]);
-        if (isNaN(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
-        s += toDec(v);
+        if (!v || v instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+        s += v.toNumber().toString();
       }
       out(s); pc++; return 'ok';
     }
@@ -353,7 +651,7 @@ function start() {
         if (!val) return;
         
         const bytes = new TextEncoder().encode(val);
-        vars[pendingInput.varName] = bytes[0];
+        vars[pendingInput.varName] = new BigHex(bytes[0]);
         
         pendingInput = null;
         inputEl.remove();
@@ -367,7 +665,7 @@ function start() {
 
     if (op === 'def') {
       const v = getVal(parts[2]);
-      if (isNaN(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
+      if (!v || v instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
       vars[parts[1]] = v; pc++; return 'ok';
     }
 
@@ -380,76 +678,73 @@ function start() {
 
     if (['add', 'sub', 'mul', 'div', 'fdiv'].includes(op)) {
       const a = getVal(parts[1]), b = getVal(parts[2]);
-      if (isNaN(a) || isNaN(b)) { err(lineNo, 'invalid operand'); return 'stop'; }
+      if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
       let r;
-      switch (op) {
-        case 'add': r = a + b; break;
-        case 'sub': r = a - b; break;
-        case 'mul': r = a * b; break;
-        case 'div':
-          if (b === 0) { err(lineNo, 'division by zero'); return 'stop'; }
-          r = Math.floor(a / b); break;
-        case 'fdiv':
-          if (b === 0) { err(lineNo, 'division by zero'); return 'stop'; }
-          r = a / b; break;
+      try {
+        switch (op) {
+          case 'add': r = a.add(b); break;
+          case 'sub': r = a.sub(b); break;
+          case 'mul': r = a.mul(b); break;
+          case 'div': r = a.div(b).floor(); break;
+          case 'fdiv': r = a.div(b); break;
+        }
+      } catch (e) {
+        err(lineNo, e.message); return 'stop';
       }
       vars[parts[1]] = r; pc++; return 'ok';
     }
 
     if (['mod', 'fmod'].includes(op)) {
       const a = getVal(parts[1]), b = getVal(parts[2]);
-      if (isNaN(a) || isNaN(b)) { err(lineNo, 'invalid operand'); return 'stop'; }
-      if (b === 0) { err(lineNo, 'division by zero'); return 'stop'; }
+      if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+      if (op === 'mod' && !b.isInteger()) { err(lineNo, 'mod requires integer divisor'); return 'stop'; }
       
-      if (op === 'mod' && !Number.isInteger(b)) { err(lineNo, 'mod requires integer divisor'); return 'stop'; }
-      
-      let r = Math.abs(a) % Math.abs(b);
-      if ((a < 0 && b > 0) || (a > 0 && b < 0)) {
-        r = -r;
+      let r;
+      try {
+        r = (op === 'mod') ? a.mod(b) : a.fmod(b);
+      } catch (e) {
+        err(lineNo, e.message); return 'stop';
       }
       vars[parts[1]] = r; pc++; return 'ok';
     }
 
     if (op === 'pow' || op === 'ipow') {
       const a = getVal(parts[1]), b = getVal(parts[2]);
-      if (isNaN(a) || isNaN(b)) { err(lineNo, 'invalid operand'); return 'stop'; }
-      
-      const res = powComplex(a, b);
-      if (res.err) { err(lineNo, 'math domain error'); return 'stop'; }
-      
-      if (op === 'pow') {
-        vars[parts[1]] = res.re;
-      } else {
-        vars[parts[1]] = res.im;
+      if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+      let r;
+      try {
+        r = (op === 'pow') ? a.pow(b) : a.ipow(b);
+      } catch (e) {
+        err(lineNo, e.message); return 'stop';
       }
-      pc++; return 'ok';
+      vars[parts[1]] = r; pc++; return 'ok';
     }
 
     if (op === 'abs' || op === 'floor' || op === 'ceil' || op === 'round') {
       const a = getVal(parts[1]);
-      if (isNaN(a)) { err(lineNo, 'invalid operand'); return 'stop'; }
+      if (!a || a instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
       let r;
       switch (op) {
-        case 'abs': r = Math.abs(a); break;
-        case 'floor': r = Math.floor(a); break;
-        case 'ceil': r = Math.ceil(a); break;
-        case 'round': r = (a >= 0 ? Math.floor(a + 0.5) : Math.ceil(a - 0.5)); break;
+        case 'abs': r = a.abs(); break;
+        case 'floor': r = a.floor(); break;
+        case 'ceil': r = a.ceil(); break;
+        case 'round': r = a.round(); break;
       }
       vars[parts[1]] = r; pc++; return 'ok';
     }
 
     if (['and', 'or', 'nand', 'nor', 'xor', 'nxor'].includes(op)) {
       const a = getVal(parts[1]), b = getVal(parts[2]);
-      if (isNaN(a) || isNaN(b)) { err(lineNo, 'invalid operand'); return 'stop'; }
+      if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
       vars[parts[1]] = bitwise2(op, a, b); pc++; return 'ok';
     }
     if (op === 'not') {
       const a = getVal(parts[1]);
-      if (isNaN(a)) { err(lineNo, 'invalid operand'); return 'stop'; }
-      const t = truncateForBitwise(a);
-      const w = bitWidth(t);
-      const m = maskFor(w);
-      vars[parts[1]] = (~t) & m; pc++; return 'ok';
+      if (!a || a instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+      const t = a.abs().floor().toNumber();
+      const w = Math.max(1, Math.floor(Math.log2(t || 1)) + 1);
+      const m = (1 << w) - 1;
+      vars[parts[1]] = new BigHex((~t) & m); pc++; return 'ok';
     }
 
     err(lineNo, 'unknown operation ' + op);
