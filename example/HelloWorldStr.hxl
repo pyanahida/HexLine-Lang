@@ -1,0 +1,2 @@
+using utf-8
+print "Hello,\x20World!\x0A"
