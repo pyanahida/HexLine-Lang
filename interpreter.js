@@ -151,48 +151,54 @@ function exec(ins) {
       });
       return 'pause';
     }
-    if (op === 'inputstr') {
-      const val = prompt("Enter string:");
-      vars[parts[1]] = val !== null ? encodeText(val, currentEncoding) : new Uint8Array(0);
-      if (areaStack.length > 0) areaStack[areaStack.length - 1].push(parts[1]);
-    }
-    if (op === 'inputnum') {
-      const val = prompt("Enter hex number (e.g. FFF.7A):");
+    
+    // 异步弹窗逻辑
+    let promptMsg = "", isDec = false, isStr = false;
+    if (op === 'inputstr') { promptMsg = "Enter string:"; isStr = true; }
+    else if (op === 'inputnum') { promptMsg = "Enter hex number (e.g. FFF.7A):"; }
+    else if (op === 'inputdecnum') { promptMsg = "Enter decimal number (e.g. 123.45):"; isDec = true; }
+    
+    // 暂停 VM 执行，等待 Promise 返回
+    running = false;
+    showDialog(promptMsg, isStr).then(val => {
       if (val !== null) {
-        try {
-          vars[parts[1]] = new BigHex(val.trim());
-          if (areaStack.length > 0) areaStack[areaStack.length - 1].push(parts[1]);
-        } catch (e) { err(lineNo, 'invalid hex number'); return 'stop'; }
-      }
-    }
-    if (op === 'inputdecnum') {
-      const val = prompt("Enter decimal number (e.g. 123.45):");
-      if (val !== null) {
-        let s = val.trim();
-        if (!/^-?\d+(\.\d+)?$/.test(s)) { err(lineNo, 'invalid decimal number'); return 'stop'; }
-        let isNeg = s.startsWith('-');
-        if (isNeg) s = s.slice(1);
-        let partsDec = s.split('.');
-        let intPart = BigInt(partsDec[0] || '0');
-        let fracPart = partsDec[1] || '';
-        let hexInt = intPart.toString(16);
-        let hexFrac = '';
-        let rem = BigInt(fracPart === '' ? '0' : fracPart);
-        let den = 10n ** BigInt(fracPart.length);
-        for (let i = 0; i < 64; i++) {
-          rem *= 16n;
-          let digit = rem / den;
-          hexFrac += digit.toString(16);
-          rem %= den;
-          if (rem === 0n) break;
+        if (isStr) {
+          vars[parts[1]] = encodeText(val, currentEncoding);
+        } else if (isDec) {
+          let s = val.trim();
+          if (!/^-?\d+(\.\d+)?$/.test(s)) { err(lineNo, 'invalid decimal number'); return; }
+          let isNeg = s.startsWith('-');
+          if (isNeg) s = s.slice(1);
+          let partsDec = s.split('.');
+          let intPart = BigInt(partsDec[0] || '0');
+          let fracPart = partsDec[1] || '';
+          let hexInt = intPart.toString(16);
+          let hexFrac = '';
+          let rem = BigInt(fracPart === '' ? '0' : fracPart);
+          let den = 10n ** BigInt(fracPart.length);
+          for (let i = 0; i < 64; i++) {
+            rem *= 16n;
+            let digit = rem / den;
+            hexFrac += digit.toString(16);
+            rem %= den;
+            if (rem === 0n) break;
+          }
+          let hexStr = hexInt + (hexFrac ? '.' + hexFrac : '');
+          if (isNeg) hexStr = '-' + hexStr;
+          vars[parts[1]] = new BigHex(hexStr);
+        } else {
+          try {
+            vars[parts[1]] = new BigHex(val.trim());
+          } catch (e) { err(lineNo, 'invalid hex number'); return; }
         }
-        let hexStr = hexInt + (hexFrac ? '.' + hexFrac : '');
-        if (isNeg) hexStr = '-' + hexStr;
-        vars[parts[1]] = new BigHex(hexStr);
         if (areaStack.length > 0) areaStack[areaStack.length - 1].push(parts[1]);
       }
-    }
-    pc++; return 'ok';
+      // 输入完成，恢复执行
+      running = true;
+      runLoop();
+    });
+    
+    return 'pause';
   }
 
   if (op === 'def' || op === 'defstr') {
@@ -246,7 +252,6 @@ function exec(ins) {
     else if (op === 'sleep-week') ms = num * 7 * 24 * 60 * 60 * 1000;
     else { err(lineNo, 'unknown sleep operation'); return 'stop'; }
     
-    // 同步阻塞当前线程，遵循“必须这样做”的硬核设定
     const start = Date.now();
     while (Date.now() - start < ms) {}
     
