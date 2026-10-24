@@ -1,0 +1,6 @@
+using utf-8
+inputstr name
+input age
+print "Hello, " name "! You're "
+printdecnum age
+print " years old!\x0A"
