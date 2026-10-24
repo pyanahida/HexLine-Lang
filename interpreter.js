@@ -49,18 +49,37 @@ function parseStrLiteral(tok) {
 
 function getVal(tok) {
   if (isLiteral(tok)) return parseLiteral(tok);
-  if (tok.includes('&')) {
-    const match = tok.match(/^([a-zA-Z0-9_]+)&index\{(-?\d+)\}$/);
+  
+  if (tok.includes('&index{')) {
+    const match = tok.match(/^([a-zA-Z0-9_]+)&index\{(.+)\}$/);
     if (match) {
-      const varName = match[1], index = parseInt(match[2], 10);
-      if (vars[varName] instanceof Uint8Array) {
+      const varName = match[1];
+      let indexTok = match[2];
+      let idxVal = null;
+      
+      if (indexTok.startsWith('$')) {
+        idxVal = new BigHex(indexTok.slice(1));
+      } else if (indexTok in vars) {
+        if (vars[indexTok] instanceof BigHex) idxVal = vars[indexTok];
+      }
+      
+      if (idxVal && vars[varName] instanceof Uint8Array) {
+        let idxNum = idxVal.toNumber();
+        // 小数直接删除（向零截断）
+        let index = idxNum < 0 ? Math.ceil(idxNum) : Math.floor(idxNum);
+        
         const arr = vars[varName];
         let targetIdx = index >= 0 ? index : arr.length + index;
-        return new BigHex((targetIdx >= 0 && targetIdx < arr.length) ? arr[targetIdx] : -1);
+        if (targetIdx >= 0 && targetIdx < arr.length) {
+          return new BigHex(arr[targetIdx]);
+        } else {
+          return new BigHex(-1);
+        }
       }
     }
     return null;
   }
+
   if (tok in vars) return vars[tok];
   return null;
 }
@@ -71,10 +90,11 @@ function buildMatches(prog) {
     const t = prog[i].text.split(/\s+/)[0];
     if (/^if-(eq|ne|gt|ge|lt|le)$/.test(t)) stack.push({ type: 'if', i });
     else if (/^while-(eq|ne|gt|ge|lt|le)$/.test(t)) stack.push({ type: 'while', i });
-    else if (t === 'endif' || t === 'endwhile') {
+    else if (t === 'loop') stack.push({ type: 'loop', i });
+    else if (t === 'endif' || t === 'endwhile' || t === 'endloop') {
       const top = stack.pop();
       if (!top) return { err: { line: prog[i].lineNo, msg: 'unmatched ' + t } };
-      const want = t === 'endif' ? 'if' : 'while';
+      const want = t === 'endif' ? 'if' : (t === 'endwhile' ? 'while' : 'loop');
       if (top.type !== want) return { err: { line: prog[i].lineNo, msg: 'mismatched ' + t } };
       map[top.i] = i;
     }
@@ -136,8 +156,8 @@ function exec(ins) {
     let depth = 0, i = pc;
     for (; i < currentProg.length; i++) {
       const t = currentProg[i].text.split(/\s+/)[0];
-      if (/^while-/.test(t)) depth++;
-      else if (t === 'endwhile') { if (depth === 0) break; depth--; }
+      if (/^while-/.test(t) || t === 'loop') depth++;
+      else if (t === 'endwhile' || t === 'endloop') { if (depth === 0) break; depth--; }
     }
     pc = i + 1; return 'jumped';
   }
@@ -145,8 +165,8 @@ function exec(ins) {
     let depth = 0, i = pc;
     for (; i >= 0; i--) {
       const t = currentProg[i].text.split(/\s+/)[0];
-      if (t === 'endwhile') depth++;
-      else if (/^while-/.test(t)) { if (depth === 0) break; depth--; }
+      if (t === 'endwhile' || t === 'endloop') depth++;
+      else if (/^while-/.test(t) || t === 'loop') { if (depth === 0) break; depth--; }
     }
     pc = i; return 'jumped';
   }
@@ -156,6 +176,38 @@ function exec(ins) {
     const target = labels[parts[1]];
     if (target === undefined) { err(lineNo, 'undefined label ' + parts[1]); return 'stop'; }
     pc = target; return 'jumped';
+  }
+
+  if (op === 'loop') {
+    // loop 的状态需要隐藏存储在全局或重新计算，为了避免引入额外状态，
+    // 这里使用一个技巧：如果下一行是 endloop，或者我们可以在内部维护。
+    // 实际上，最简单的办法是在进入 loop 时将计数存在一个隐藏的变量或栈中。
+    // 但由于我们在单线程逐行执行，可以利用 match 反查。
+    
+    // 这里我们使用一个 Map 来记录当前的 loop 剩余次数。
+    if (!globalThis.loopCounters) globalThis.loopCounters = {};
+    const loopId = pc;
+    
+    if (globalThis.loopCounters[loopId] === undefined) {
+      const countVal = getVal(parts[1]);
+      if (!countVal || countVal instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+      let n = countVal.toNumber();
+      n = n < 0 ? Math.ceil(n) : Math.floor(n);
+      globalThis.loopCounters[loopId] = n > 0 ? n : 0;
+    }
+    
+    if (globalThis.loopCounters[loopId] <= 0) {
+      pc = currentMatch[pc] + 1;
+      return 'jumped';
+    }
+    globalThis.loopCounters[loopId]--;
+    pc++; return 'ok';
+  }
+  
+  if (op === 'endloop') {
+    let start = -1;
+    for (const k in currentMatch) if (currentMatch[k] === pc) { start = parseInt(k); break; }
+    pc = start; return 'jumped';
   }
 
   if (op === 'print') {
