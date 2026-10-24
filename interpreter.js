@@ -15,10 +15,7 @@ function exec(ins) {
   }
   if (op === 'endif') { pc++; return 'ok'; }
   
-  if (op === 'endif-else') {
-    pc = currentMatch[pc] + 1; 
-    return 'jumped';
-  }
+  if (op === 'endif-else') { pc = currentMatch[pc] + 1; return 'jumped'; }
   if (op === 'endelse') { pc++; return 'ok'; }
 
   if (/^while-(eq|ne|gt|ge|lt|le)$/.test(op)) {
@@ -199,7 +196,7 @@ function exec(ins) {
   }
 
   if (op === 'def' || op === 'defstr') {
-    if (['TRUE', 'FALSE', 'PI', 'E', 'RANDOM'].includes(parts[1])) { err(lineNo, 'reserved literal cannot be a variable'); return 'stop'; }
+    if (['TRUE', 'FALSE', 'PI', 'E', 'RANDOM', 'TIME'].includes(parts[1])) { err(lineNo, 'reserved literal cannot be a variable'); return 'stop'; }
     if (op === 'def') {
       const v = getVal(parts[2]);
       if (!v || v instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
@@ -221,6 +218,39 @@ function exec(ins) {
     const v = getVal(parts[1]);
     if (!v || v instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
     vars[parts[1]] = v.dot(); pc++; return 'ok';
+  }
+  
+  if (op === 'swap') {
+    const a = parts[1], b = parts[2];
+    if (!(a in vars) || !(b in vars)) { err(lineNo, 'undefined variable'); return 'stop'; }
+    const typeA = vars[a] instanceof Uint8Array ? 'str' : 'num';
+    const typeB = vars[b] instanceof Uint8Array ? 'str' : 'num';
+    if (typeA !== typeB) { err(lineNo, 'cannot swap different types'); return 'stop'; }
+    const tmp = vars[a];
+    vars[a] = vars[b];
+    vars[b] = tmp;
+    pc++; return 'ok';
+  }
+
+  if (op.startsWith('sleep-')) {
+    const v = getVal(parts[1]);
+    if (!v || v instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+    let num = Math.abs(v.toNumber());
+    let ms = 0;
+    if (op === 'sleep-s') ms = num * 1000;
+    else if (op === 'sleep-ms') ms = num;
+    else if (op === 'sleep-us') ms = num / 1000;
+    else if (op === 'sleep-min') ms = num * 60 * 1000;
+    else if (op === 'sleep-hour') ms = num * 60 * 60 * 1000;
+    else if (op === 'sleep-day') ms = num * 24 * 60 * 60 * 1000;
+    else if (op === 'sleep-week') ms = num * 7 * 24 * 60 * 60 * 1000;
+    else { err(lineNo, 'unknown sleep operation'); return 'stop'; }
+    
+    // 同步阻塞当前线程，遵循“必须这样做”的硬核设定
+    const start = Date.now();
+    while (Date.now() - start < ms) {}
+    
+    pc++; return 'ok';
   }
 
   if (['add', 'sub', 'mul', 'div', 'fdiv'].includes(op)) {
