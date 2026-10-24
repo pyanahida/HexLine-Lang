@@ -178,7 +178,8 @@ class BigHex {
       if (!isFirst || d > 0) { q.int.push(d); isFirst = false; }
     }
     if (q.int.length === 0) q.int = [0];
-    for (let iter = 0; iter < 32; iter++) {
+    // 截断改为 64 位
+    for (let iter = 0; iter < 64; iter++) {
       r = r.mul(new BigHex(16));
       let d = 0;
       let B_abs = new BigHex(); B_abs.int = B; 
