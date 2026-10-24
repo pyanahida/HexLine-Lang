@@ -37,6 +37,7 @@ print $41 $42 $43
 
 ## Lesson 2: Variables and Math
 Variables are defined using `def`. All numbers are hexadecimal (`$` is the same as `0x`).
+We also have built-in literals: `TRUE` (`1`), `FALSE` (`0`), `PI`, and `E`.
 
 ```text
 using utf-8
@@ -45,7 +46,8 @@ def b $5       // b = 5
 add a b        // a = a + b (21 in decimal, or $15)
 printnum a     // Outputs '15' (hex)
 ```
-Note: Hexline has infinite precision. You can do `def c $FFF.7A`, and it will never lose its accuracy.
+
+Hexline has infinite precision. You can do `def c $FFF.7A`, and it will never lose its accuracy.
 
 ## Lesson 3: Logic and Control Flow
 Hexline doesn't have `else`, but it has conditionals and loops. Blocks are closed with `endif` or `endloop`.
@@ -59,7 +61,6 @@ loop a
 endloop
 print $0A     // $0A is the newline character
 ```
-*(Output: `*****` followed by a newline)*
 
 You can also use `while` loops or `if` conditions:
 ```text
@@ -83,12 +84,12 @@ print a           // Outputs 'h'
 You can also use variables for the index. If you index out of bounds, it returns `-1`.
 
 ## Lesson 5: Interactive Input
-You can read user input. `input` reads a single character (UTF-8 byte), and `inputstr` opens a prompt for a full string.
+You can read user input. `input` reads a single character, `inputstr` opens a prompt for a string, and `inputnum` / `inputdecnum` read numbers.
 
 ```text
 using utf-8
-input a
-print a
+inputnum a
+printnum a
 ```
 
 ---
@@ -97,6 +98,7 @@ print a
 
 ## Numbers & Precision
 - Literals are hexadecimal only: `$` == `0x` (`$41`, `$-1`, `$7.5`).
+- Built-in literals: `TRUE` (`$1`), `FALSE` (`$0`), `PI`, `E`. (These cannot be used as variable names).
 - No integer/float distinction.
 - **Arbitrary Precision**: Numbers are stored as hex arrays. Precision auto-expands as needed.
 - Non-terminating fractions are truncated to 32 hex digits.
@@ -112,9 +114,14 @@ print a
 - `add/sub/mul/div/fdiv a b` — `div` floors, `fdiv` normal division.
 - `mod/fmod a b` — `mod` requires integer `b`. Signs: same=positive, diff=negative.
 - `pow/ipow a b` — Real/Imaginary parts of \(a^b\).
+- `concatnum a b` — Purely textual concatenation of `a` and `b`. Integer parts join, fractional parts join. Zero integer parts are omitted (but default to '0' if both are empty). Signs: same sign -> positive, diff sign -> negative.
 - `abs/floor/ceil/round/dot a` — `dot` clears the integer part, keeping the decimal.
-- `lg/ln/log2/sin/cos/tan/arcsin/arccos/arctan a` — Math functions (radians).
+- `lg/ln/log2 a` — Logarithms (base 10, e, 2).
 - `log a b` — Base `b` logarithm of `a`.
+- `sin/cos/tan/arcsin/arccos/arctan a` — Trig functions.
+- `sinh/cosh/tanh/arsinh/arcosh/artanh a` — Hyperbolic functions.
+- `exp/ten a` — \(e^a\) and \(10^a\).
+- `usingrad` / `usingdeg` — Switch trig mode between radians and degrees (default `usingrad`).
 
 ## Strings
 - `s&index{N}` — Extract Nth byte (0-based). Negative `N` counts from right. Decimals truncate.
@@ -127,9 +134,12 @@ print a
 - `if-eq A B ... endif` (also `ne`, `gt`, `ge`, `lt`, `le`)
 - `while-eq A B ... endwhile`
 - `loop N ... endloop`
+- `area ... endarea` — Dynamic scope block. Variables defined inside are destroyed at the end. Modifying external variables affects them globally.
 - `break` / `continue`
 - `label #name` / `goto #name`
 
 ## Input
 - `input a` — Reads one character.
 - `inputstr a` — Reads a whole string.
+- `inputnum a` — Prompts for a hex number.
+- `inputdecnum a` — Prompts for a decimal number (converted to hex, 64 digits precision).
