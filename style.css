@@ -144,3 +144,31 @@ select:focus {
     font-size: 16px;
   }
 }
+
+.toolbar a {
+  padding: 8px 16px;
+  font-family: monospace;
+  font-size: 14px;
+  background: #2a2a2a;
+  color: #ddd;
+  border: 1px solid #555;
+  border-radius: 4px;
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  display: inline-block;
+}
+
+.toolbar a:active {
+  background: #3a3a3a;
+}
+
+@media (max-width: 480px) {
+  .toolbar a {
+    width: 100%;
+    padding: 12px;
+    font-size: 16px;
+    text-align: center;
+    box-sizing: border-box;
+  }
+}
