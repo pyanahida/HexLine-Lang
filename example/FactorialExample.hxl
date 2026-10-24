@@ -1,0 +1,12 @@
+using utf-8
+
+def goal $14
+def i $1
+defarr nums
+while-le i goal
+    append nums i
+    add i $1
+endwhile
+def res $0
+prod res nums
+printnum res
