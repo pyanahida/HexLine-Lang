@@ -3,8 +3,12 @@ let pendingInput = null;
 let currentEncoding = 'utf-8';
 let currentProg = [];
 let currentMatch = {};
-let useDegrees = false; // 默认弧度制
-let areaStack = []; // 用于记录每一层 area 声明的变量
+let useDegrees = false; 
+let areaStack = []; 
+
+// 预计算 PI 和 E 的十六进制字符串，保留 32 位
+const PI_HEX = Math.PI.toString(16);
+const E_HEX = Math.E.toString(16);
 
 function parse(src) {
   const lines = src.split(/\r?\n/);
@@ -25,8 +29,21 @@ function parse(src) {
   return { prog, encoding };
 }
 
-function isLiteral(t) { return t.startsWith('$'); }
-function parseLiteral(t) { return new BigHex(t.slice(1)); }
+function isLiteral(t) { 
+  if (t === 'TRUE') return true;
+  if (t === 'FALSE') return true;
+  if (t === 'PI') return true;
+  if (t === 'E') return true;
+  return t.startsWith('$'); 
+}
+
+function parseLiteral(t) { 
+  if (t === 'TRUE') return new BigHex(1);
+  if (t === 'FALSE') return new BigHex(0);
+  if (t === 'PI') return new BigHex(PI_HEX);
+  if (t === 'E') return new BigHex(E_HEX);
+  return new BigHex(t.slice(1)); 
+}
 
 function parseStrLiteral(tok) {
   if (!tok.startsWith('"') || !tok.endsWith('"')) return null;
@@ -118,7 +135,7 @@ function buildMatches(prog) {
       const want = t === 'endif' ? 'if' : (t === 'endwhile' ? 'while' : (t === 'endloop' ? 'loop' : 'area'));
       if (top.type !== want) return { err: { line: prog[i].lineNo, msg: 'mismatched ' + t } };
       map[top.i] = i;
-      map[i] = top.i; // 记录双向映射，方便 goto 判断
+      map[i] = top.i; 
     }
   }
   if (stack.length) return { err: { line: prog[stack[stack.length - 1].i].lineNo, msg: 'unclosed block' } };
@@ -206,24 +223,11 @@ function exec(ins) {
   if (op === 'goto') {
     const target = labels[parts[1]];
     if (target === undefined) { err(lineNo, 'undefined label ' + parts[1]); return 'stop'; }
-    
-    // 强制跨越 area 时的栈清理逻辑
-    // 如果目标是往外跳
-    if (target < pc) {
-      // 简单计算跳转造成的 area 跨界：如果目标在某个还未闭合的 area 外面
-      // 直接把在这中间跨越的 area 都弹栈
-      let currentAreaStart = -1;
-      for (let i = 0; i < areaStack.length; i++) {
-        // 粗略判断，只要目标 < area 开始位置，就证明跳出了这一层
-      }
-      // 因为无法完美静态推导，采用简化的深度记录
-    }
-    
     pc = target; return 'jumped';
   }
 
   if (op === 'area') {
-    areaStack.push([]); // 开启新作用域
+    areaStack.push([]); 
     pc++; return 'ok';
   }
   
@@ -380,6 +384,7 @@ function exec(ins) {
   }
 
   if (op === 'def') {
+    if (['TRUE', 'FALSE', 'PI', 'E'].includes(parts[1])) { err(lineNo, 'reserved literal cannot be a variable'); return 'stop'; }
     const v = getVal(parts[2]);
     if (!v || v instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
     vars[parts[1]] = v; 
@@ -388,6 +393,7 @@ function exec(ins) {
   }
 
   if (op === 'defstr') {
+    if (['TRUE', 'FALSE', 'PI', 'E'].includes(parts[1])) { err(lineNo, 'reserved literal cannot be a variable'); return 'stop'; }
     let rawStr = ins.text.slice(ins.text.indexOf(parts[1]) + parts[1].length).trim();
     if (rawStr.startsWith('"') && rawStr.endsWith('"')) {
       const strVal = parseStrLiteral(rawStr);
@@ -454,13 +460,12 @@ function exec(ins) {
     pc++; return 'ok';
   }
 
-  if (['lg', 'ln', 'log2', 'sin', 'cos', 'tan', 'arcsin', 'arccos', 'arctan'].includes(op)) {
+  if (['lg', 'ln', 'log2', 'sin', 'cos', 'tan', 'arcsin', 'arccos', 'arctan', 'sinh', 'cosh', 'tanh', 'arsinh', 'arcosh', 'artanh', 'exp', 'ten'].includes(op)) {
     const a = getVal(parts[1]);
     if (!a || a instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
     try {
       let an = a.toNumber(), rn = 0;
       
-      // 角度制转弧度制处理
       let trigIn = an;
       if (useDegrees) {
         if (op === 'sin' || op === 'cos' || op === 'tan') trigIn = an * Math.PI / 180;
@@ -475,8 +480,15 @@ function exec(ins) {
       else if (op === 'arcsin') { if (an < -1 || an > 1) throw new Error(); rn = Math.asin(an); }
       else if (op === 'arccos') { if (an < -1 || an > 1) throw new Error(); rn = Math.acos(an); }
       else if (op === 'arctan') rn = Math.atan(an);
+      else if (op === 'sinh') rn = Math.sinh(an);
+      else if (op === 'cosh') rn = Math.cosh(an);
+      else if (op === 'tanh') rn = Math.tanh(an);
+      else if (op === 'arsinh') rn = Math.asinh(an);
+      else if (op === 'arcosh') { if (an < 1) throw new Error(); rn = Math.acosh(an); }
+      else if (op === 'artanh') { if (an <= -1 || an >= 1) throw new Error(); rn = Math.atanh(an); }
+      else if (op === 'exp') rn = Math.exp(an);
+      else if (op === 'ten') rn = Math.pow(10, an);
 
-      // 反三角函数弧度转角度处理
       if (useDegrees) {
         if (op === 'arcsin' || op === 'arccos' || op === 'arctan') rn = rn * 180 / Math.PI;
       }
@@ -484,6 +496,39 @@ function exec(ins) {
       if (isNaN(rn)) throw new Error('Math domain error');
       vars[parts[1]] = new BigHex(rn.toString(16));
     } catch (e) { err(lineNo, 'Math domain error'); return 'stop'; }
+    pc++; return 'ok';
+  }
+
+  if (op === 'concatnum') {
+    const a = getVal(parts[1]), b = getVal(parts[2]);
+    if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+    
+    // 符号处理：同号为正，异号为负
+    let resSign = (a.sign === b.sign) ? 1 : -1;
+    
+    let strA = a.abs().toString();
+    let strB = b.abs().toString();
+    
+    let partsA = strA.split('.');
+    let partsB = strB.split('.');
+    
+    let intA = partsA[0] === '0' ? '' : partsA[0];
+    let fracA = partsA[1] || '';
+    let intB = partsB[0] === '0' ? '' : partsB[0];
+    let fracB = partsB[1] || '';
+    
+    let newInt = intA + intB;
+    if (newInt === '') newInt = '0';
+    
+    let newFrac = fracA + fracB;
+    
+    let finalStr = newInt + (newFrac ? '.' + newFrac : '');
+    
+    let result = new BigHex(finalStr);
+    result.sign = resSign;
+    if (result.isZero()) result.sign = 1;
+    
+    vars[parts[1]] = result;
     pc++; return 'ok';
   }
 
