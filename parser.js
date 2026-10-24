@@ -25,7 +25,7 @@ function parse(src) {
 }
 
 function isLiteral(t) { 
-  if (t === 'TRUE' || t === 'FALSE' || t === 'PI' || t === 'E' || t === 'RANDOM') return true;
+  if (t === 'TRUE' || t === 'FALSE' || t === 'PI' || t === 'E' || t === 'RANDOM' || t === 'TIME') return true;
   return t.startsWith('$'); 
 }
 
@@ -34,6 +34,7 @@ function parseLiteral(t) {
   if (t === 'FALSE') return new BigHex(0);
   if (t === 'PI') return new BigHex(PI_HEX);
   if (t === 'E') return new BigHex(E_HEX);
+  if (t === 'TIME') return new BigHex(Math.floor(Date.now() / 1000));
   if (t === 'RANDOM') {
     let str = "0.";
     for (let i = 0; i < 64; i++) str += Math.floor(Math.random() * 16).toString(16).toUpperCase();
@@ -85,6 +86,31 @@ function splitArgs(str) {
 function getVal(tok) {
   if (isLiteral(tok)) return parseLiteral(tok);
   
+  if (tok.startsWith('RANDINT{')) {
+    const match = tok.match(/^RANDINT\{(.+)\}\{(.+)\}$/);
+    if (match) {
+      let vA = null, vB = null;
+      let tokA = match[1], tokB = match[2];
+      
+      if (tokA.startsWith('$')) vA = new BigHex(tokA.slice(1));
+      else if (tokA in vars && vars[tokA] instanceof BigHex) vA = vars[tokA];
+      
+      if (tokB.startsWith('$')) vB = new BigHex(tokB.slice(1));
+      else if (tokB in vars && vars[tokB] instanceof BigHex) vB = vars[tokB];
+      
+      if (vA && vB) {
+        let nA = vA.toNumber(), nB = vB.toNumber();
+        let iA = nA < 0 ? Math.ceil(nA) : Math.floor(nA);
+        let iB = nB < 0 ? Math.ceil(nB) : Math.floor(nB);
+        let min = Math.min(iA, iB);
+        let max = Math.max(iA, iB);
+        let randInt = Math.floor(Math.random() * (max - min + 1)) + min;
+        return new BigHex(randInt);
+      }
+      return null;
+    }
+  }
+
   if (tok.includes('&index{')) {
     const match = tok.match(/^([a-zA-Z0-9_]+)&index\{(.+)\}$/);
     if (match) {
