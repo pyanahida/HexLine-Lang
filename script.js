@@ -31,9 +31,9 @@ function err(line, msg) {
 // ==========================================
 class BigHex {
   constructor(val) {
-    this.int = []; // array of nibbles (0-15), most significant first
-    this.frac = []; // array of nibbles (0-15)
-    this.sign = 1; // 1 or -1
+    this.int = []; 
+    this.frac = []; 
+    this.sign = 1; 
     
     if (val !== undefined) {
       if (val instanceof BigHex) {
@@ -111,10 +111,7 @@ class BigHex {
     return r;
   }
 
-  // --- Core Arithmetic Helpers ---
-
   align(a, b) {
-    // Return { ai, af, bi, bf } with aligned fractional lengths
     const fLen = Math.max(a.frac.length, b.frac.length);
     const ai = [...a.int], af = [...a.frac];
     const bi = [...b.int], bf = [...b.frac];
@@ -164,7 +161,6 @@ class BigHex {
   }
 
   static subAbs(a, b) {
-    // Assumes |a| >= |b|
     let { ai, af, bi, bf } = a.align(b);
     let rf = [];
     let borrow = 0;
@@ -243,7 +239,6 @@ class BigHex {
     let q = new BigHex();
     let r = new BigHex();
     
-    // Integer division
     let A = this.int;
     let B = o.int;
     r.int = [0];
@@ -268,7 +263,6 @@ class BigHex {
     }
     if (q.int.length === 0) q.int = [0];
 
-    // Fraction division
     for (let iter = 0; iter < 64; iter++) {
       r = r.mul(new BigHex(16));
       let d = 0;
@@ -286,8 +280,6 @@ class BigHex {
     return q;
   }
 
-  // --- Math Functions ---
-  
   isInteger() { return this.frac.length === 0; }
   
   toNumber() {
@@ -337,7 +329,7 @@ class BigHex {
     if (o.isZero()) throw new Error('division by zero');
     if (this.isZero()) return new BigHex(0);
     let q = this.div(o);
-    q.frac = []; // trunc
+    q.frac = []; 
     return this.sub(q.mul(o));
   }
 
@@ -364,7 +356,6 @@ class BigHex {
       return res;
     }
     
-    // Fractional power (requires ln/exp, which are hard in hex, so we fallback to JS)
     let bNum = this.toNumber();
     let rNum = Math.pow(bNum, oNum);
     if (isNaN(rNum)) throw new Error('Math error');
@@ -374,7 +365,6 @@ class BigHex {
   ipow(o) {
     let oNum = o.toNumber();
     if (this.sign < 0 && !o.isInteger()) {
-      // Complex calculation (a+bi)^b
       let a = this.toNumber();
       let r = Math.abs(a);
       let theta = Math.PI;
@@ -422,11 +412,7 @@ function isLiteral(t) { return t.startsWith('$'); }
 function parseLiteral(t) {
   return new BigHex(t.slice(1));
 }
-function getVal(tok) {
-  if (isLiteral(tok)) return parseLiteral(tok);
-  if (tok in vars) return vars[tok];
-  return null;
-}
+
 function parseStrLiteral(tok) {
   if (!tok.startsWith('"') || !tok.endsWith('"')) return null;
   const inner = tok.slice(1, -1);
@@ -453,6 +439,33 @@ function parseStrLiteral(tok) {
   }
   return new Uint8Array(bytes);
 }
+
+function getVal(tok) {
+  if (isLiteral(tok)) return parseLiteral(tok);
+  
+  // 处理字符串提取，例如 s&index{4}
+  if (tok.includes('&')) {
+    const match = tok.match(/^([a-zA-Z0-9_]+)&index\{(-?\d+)\}$/);
+    if (match) {
+      const varName = match[1];
+      const index = parseInt(match[2], 10);
+      if (vars[varName] instanceof Uint8Array) {
+        const arr = vars[varName];
+        let targetIdx = index >= 0 ? index : arr.length + index;
+        if (targetIdx >= 0 && targetIdx < arr.length) {
+          return new BigHex(arr[targetIdx]);
+        } else {
+          return new BigHex(-1);
+        }
+      }
+    }
+    return null;
+  }
+
+  if (tok in vars) return vars[tok];
+  return null;
+}
+
 
 // ---------- interpreter ----------
 function start() {
@@ -497,7 +510,7 @@ function start() {
   function cmp(op, a, b) {
     let c = BigHex.cmpAbs(a, b);
     if (a.sign !== b.sign) c = a.sign > b.sign ? 1 : -1;
-    else if (a.sign < 0) c = -c; // both negative, reverse
+    else if (a.sign < 0) c = -c; 
     
     switch (op) {
       case 'eq': return c === 0;
@@ -507,10 +520,6 @@ function start() {
       case 'lt': return c < 0;
       case 'le': return c <= 0;
     }
-  }
-
-  function toIntNum(bh) {
-    return Math.trunc(bh.toNumber());
   }
 
   function bitwise2(op, a, b) {
@@ -662,6 +671,19 @@ function start() {
       
       return 'pause';
     }
+    
+    if (op === 'inputstr') {
+      const val = prompt("Enter string:");
+      if (val !== null) {
+        try {
+          const encoder = new TextEncoder(currentEncoding);
+          vars[parts[1]] = encoder.encode(val);
+        } catch (e) {
+          vars[parts[1]] = new TextEncoder().encode(val);
+        }
+      }
+      pc++; return 'ok';
+    }
 
     if (op === 'def') {
       const v = getVal(parts[2]);
@@ -670,9 +692,16 @@ function start() {
     }
 
     if (op === 'defstr') {
-      const strVal = parseStrLiteral(parts[2]);
-      if (strVal === null) { err(lineNo, 'invalid string literal'); return 'stop'; }
-      vars[parts[1]] = strVal;
+      // Fix: tokens split by space could break strings with spaces.
+      // Rejoin the remainder and strip quotes.
+      let rawStr = ins.text.slice(ins.text.indexOf(parts[1]) + parts[1].length).trim();
+      if (rawStr.startsWith('"') && rawStr.endsWith('"')) {
+        const strVal = parseStrLiteral(rawStr);
+        if (strVal === null) { err(lineNo, 'invalid string literal'); return 'stop'; }
+        vars[parts[1]] = strVal;
+      } else {
+         err(lineNo, 'invalid string literal'); return 'stop';
+      }
       pc++; return 'ok';
     }
 
