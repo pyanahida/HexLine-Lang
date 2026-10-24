@@ -6,7 +6,7 @@ Hexline is an assembly-like, hex-centric language with arbitrary precision, infi
 
 ## Files
 - `index.html` — UI: file picker, examples dropdown, code box, run button, console
-- `bighex.js` / `encoding.js` / `parser.js` / `interpreter.js` / `ui.js` — split logic
+- `bighex.js` / `encoding.js` / `dialog.js` / `parser.js` / `interpreter.js` / `ui.js` — split logic
 - `style.css` — minimal dark theme
 
 ## Quick Start
@@ -75,7 +75,7 @@ endloop
 print $0A     // $0A is the newline character
 ```
 
-## Lesson 4: Strings and Indexing
+## Lesson 4: Strings, Indexing & Searching
 String variables (byte strings) are defined with `defstr`. They cannot do math, but they can be printed, indexed, and searched!
 
 ```text
@@ -86,7 +86,7 @@ def b s&find{"cd"} // Finds substring "cd", returns index $3
 print a
 ```
 
-## Lesson 5: Memory and Scopes
+## Lesson 5: Dynamic Scopes & Memory
 Variables can be swapped (if they are the same type) or deleted. You can also create temporary scopes with `area`.
 
 ```text
@@ -97,11 +97,21 @@ swap a b       // a becomes $2, b becomes $1
 del b          // b is gone
 ```
 
-## Lesson 6: Interactive Input & Timing
+## Lesson 6: Arrays
+Arrays store sequences of hex numbers. Let's create one and manipulate it.
+```text
+using utf-8
+defarr arr $A $B $C  // Array of 3 elements
+append arr $D        // Add $D to the end
+def len arr&len      // len = 4
+def val arr&index{1} // val = $B
+```
+
+## Lesson 7: Interactive Input & Timing
 You can read user input, or even block the entire browser thread if you want.
 ```text
 using utf-8
-inputnum a     // Opens prompt for hex input
+inputnum a     // Opens dialog for hex input
 sleep-s 2.5    // Blocks the browser for 2.5 seconds (press F5 to force quit!)
 print "Done"
 ```
@@ -117,7 +127,7 @@ print "Done"
   - `PI` (64 hex digits), `E` (64 hex digits)
   - `RANDOM`: Generates a random hex float in `[0, 1)` with 64-digit precision.
   - `TIME`: Current Unix timestamp.
-  - `RANDINT{a}{b}`: Generates a random integer in `[min(a,b), max(a,b)]`. Decimals in `a` and `b` are truncated.
+  - `RANDINT{a}{b}`: Generates a random integer in `[min(a,b), max(a,b)]`. Decimals truncate.
 - **Arbitrary Precision**: No integer/float distinction. Infinite precision arrays used. Non-terminating fractions are truncated to 64 hex digits.
 
 ## Output
@@ -128,31 +138,43 @@ print "Done"
 ## Variables & Memory
 - `def a $10`: Define a number.
 - `defstr s "text\x41"`: Define a string. Supports `\\`, `\"`, `\xNN`.
-- `del a`: Delete a variable.
+- `defarr arr x y z`: Define a numeric array.
+- `del a`: Delete a variable. If `a` is an array, `del arr index` deletes a specific element.
 - `swap a b`: Swap the values of `a` and `b` (errors if types differ).
-- `area ... endarea`: Dynamic scope block. Variables declared inside are destroyed at `endarea`. Modifying external variables affects them globally.
+- `area ... endarea`: Dynamic scope block. Variables declared inside are destroyed at `endarea`.
+
+## Arrays
+- `append arr x`: Append `x` to the array.
+- `allclear arr`: Empty the array.
+- `exchange arr index place x`: 
+  - `place == 0`: replace `arr[index]` with `x`.
+  - `place < 0`: insert `x` before `arr[index]`.
+  - `place > 0`: insert `x` after `arr[index]`.
+- `arr&index{x}`: Read element at `x` (negative allowed). Errors on out-of-bounds.
+- `arr&len`: Get array length.
+- `arr&include{x}`: Returns `1` if `x` is in array, else `0`.
+- `arr&findfirst{x}`: Returns index of first occurrence of `x`, or `-1`.
+
+## Strings (Byte Arrays)
+- `s&index{N}`: Extract Nth byte (0-based). Negative `N` counts from right. Decimals truncate. Returns `-1` if out of bounds.
+- `s&find{d}`: Search for substring (if `d` is a string) or byte (if `d` is a number). Returns first index or `-1`.
 
 ## Arithmetic & Math
 - `add/sub/mul/div/fdiv a b`: `div` floors, `fdiv` standard division.
 - `mod/fmod a b`: `mod` requires integer `b`. Sign follows: same signs -> positive, diff signs -> negative.
 - `pow/ipow a b`: Real/Imaginary parts of \(a^b\).
-- `concatnum a b`: Textual concatenation of numbers (integer parts join, fractional parts join). Same sign -> positive, diff sign -> negative.
+- `concatnum a b`: Textual concatenation of numbers.
 - `abs/floor/ceil/round/dot a`: `dot` clears the integer part, keeping the decimal.
 - `lg/ln/log2 a`: Base 10, e, 2 logarithms.
 - `log a b`: Base `b` logarithm of `a`.
 - `sin/cos/tan/arcsin/arccos/arctan a`: Trig functions.
 - `sinh/cosh/tanh/arsinh/arcosh/artanh a`: Hyperbolic functions.
 - `exp/ten a`: \(e^a\) and \(10^a\).
-- `usingrad` / `usingdeg`: Switch trig mode between radians and degrees (default is radians).
-
-## Strings (Byte Arrays)
-- `s&index{N}`: Extract Nth byte (0-based). Negative `N` counts from right. Decimals truncate. Returns `-1` if out of bounds.
-- `s&find{d}`: Search for substring (if `d` is a string) or byte (if `d` is a number). Returns first index or `-1`.
+- `usingrad` / `usingdeg`: Switch trig mode between radians and degrees.
 
 ## Bitwise
 - `and/or/xor/nand/nor/nxor a b`
 - `not a`
-- *Note: Operands truncate fractions and take absolute values.*
 
 ## Control Flow
 - `if-eq A B ... endif` OR `if-eq A B ... endif-else ... endelse` (Also `ne`, `gt`, `ge`, `lt`, `le`).
@@ -164,7 +186,7 @@ print "Done"
 ## Timing (Blocking)
 - `sleep-s a`, `sleep-ms a`, `sleep-us a`
 - `sleep-min a`, `sleep-hour a`, `sleep-day a`, `sleep-week a`
-- Blocks the main thread for `a` time. Supports decimals. Negatives are treated as absolute.
+- Blocks the main thread for `a` time. Negatives are treated as absolute.
 
 ## Input
 - `input a`: Reads one character (UTF-8 byte).
