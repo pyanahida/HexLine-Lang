@@ -144,6 +144,9 @@ function getVal(tok) {
     if (varName in vars && Array.isArray(vars[varName])) {
       return new BigHex(vars[varName].length);
     }
+    if (varName in vars && vars[varName] instanceof Uint8Array) {
+      return new BigHex(vars[varName].length);
+    }
     return null;
   }
 
