@@ -4,7 +4,7 @@ A tiny language created on 2026-10-23. One operation per line. The compiler is a
 
 ## Files
 - `index.html` — UI: file picker, examples dropdown, code box, run button, console
-- `script.js` (or split logic: `bighex.js`, `encoding.js`, `interpreter.js`, `ui.js`) — lexer/parser/interpreter
+- `bighex.js` / `encoding.js` / `parser.js` / `interpreter.js` / `ui.js` — split logic
 - `style.css` — minimal dark theme
 
 ## Quick Start
@@ -37,7 +37,7 @@ print $41 $42 $43
 
 ## Lesson 2: Variables and Math
 Variables are defined using `def`. All numbers are hexadecimal (`$` is the same as `0x`).
-We also have built-in literals: `TRUE` (`1`), `FALSE` (`0`), `PI`, and `E`.
+We also have built-in literals: `TRUE` (`1`), `FALSE` (`0`), `PI`, `E`, and `RANDOM` (0~1 random 64-bit float).
 
 ```text
 using utf-8
@@ -50,8 +50,19 @@ printnum a     // Outputs '15' (hex)
 Hexline has infinite precision. You can do `def c $FFF.7A`, and it will never lose its accuracy.
 
 ## Lesson 3: Logic and Control Flow
-Hexline doesn't have `else`, but it has conditionals and loops. Blocks are closed with `endif` or `endloop`.
+Hexline supports `if-eq` with `endif-else` and `endelse` for branching.
 
+```text
+using utf-8
+def x $2
+if-eq x $2
+  print "X is two!"
+endif-else
+  print "X is not two."
+endelse
+```
+
+Loops and areas (scope blocks) are also supported:
 ```text
 using utf-8
 def a $5
@@ -62,26 +73,16 @@ endloop
 print $0A     // $0A is the newline character
 ```
 
-You can also use `while` loops or `if` conditions:
-```text
-using utf-8
-def x $2
-if-eq x $2
-  print "X is two!"
-endif
-```
-
 ## Lesson 4: Strings and Indexing
-String variables (byte strings) are defined with `defstr`. They can't do math, but they can be printed and indexed!
+String variables (byte strings) are defined with `defstr`. They can be printed, indexed, and searched!
 
 ```text
 using utf-8
-defstr s "hex"
-def a s&index{0}  // Extracts the 0th byte: 'h' ($68)
-print a           // Outputs 'h'
+defstr s "hexcdc"
+def a s&index{0}  // Extracts the 0th byte: 'h'
+def b s&find{"cd"} // Finds substring "cd", returns index 3 ($3)
+def c s&find{$63}  // Finds byte 'c' ($63), returns index 2
 ```
-
-You can also use variables for the index. If you index out of bounds, it returns `-1`.
 
 ## Lesson 5: Interactive Input
 You can read user input. `input` reads a single character, `inputstr` opens a prompt for a string, and `inputnum` / `inputdecnum` read numbers.
@@ -97,50 +98,39 @@ printnum a
 # Language Reference
 
 ## Numbers & Precision
-- Literals are hexadecimal only: `$` == `0x` (`$41`, `$-1`, `$7.5`).
-- Built-in literals: `TRUE` (`$1`), `FALSE` (`$0`), `PI`, `E`. (These cannot be used as variable names).
-- No integer/float distinction.
-- **Arbitrary Precision**: Numbers are stored as hex arrays. Precision auto-expands as needed.
-- Non-terminating fractions are truncated to 64 hex digits.
+- Literals are hexadecimal only: `$` == `0x`.
+- Built-in literals: `TRUE` (`$1`), `FALSE` (`$0`), `PI`, `E`, `RANDOM` (64-bit hex float in [0, 1)).
+- **Arbitrary Precision**: Numbers are stored as hex arrays. Non-terminating fractions are truncated to 64 hex digits.
 - Built-in `PI` and `E` are accurate to 64 hex digits.
 
 ## Output
-- `print ...` — Outputs bytes/strings using the `using` encoding. NUL for out-of-range ints.
-- `printnum ...` — Hexadecimal, uppercase, no `0x`.
+- `print ...` — Outputs bytes/strings using the `using` encoding.
+- `printnum ...` — Hexadecimal, uppercase.
 - `printdecnum ...` — Decimal.
 
 ## Variables & Arithmetic
-- `def a $10` / `del a` (delete variable)
-- `defstr s "text\x41"` — Supports `\\`, `\"`, `\xNN`.
-- `add/sub/mul/div/fdiv a b` — `div` floors, `fdiv` normal division.
-- `mod/fmod a b` — `mod` requires integer `b`. Signs: same=positive, diff=negative.
-- `pow/ipow a b` — Real/Imaginary parts of \(a^b\).
-- `concatnum a b` — Purely textual concatenation of `a` and `b`. Integer parts join, fractional parts join. Zero integer parts are omitted (but default to '0' if both are empty). Signs: same sign -> positive, diff sign -> negative.
-- `abs/floor/ceil/round/dot a` — `dot` clears the integer part, keeping the decimal.
-- `lg/ln/log2 a` — Logarithms (base 10, e, 2).
-- `log a b` — Base `b` logarithm of `a`.
-- `sin/cos/tan/arcsin/arccos/arctan a` — Trig functions.
-- `sinh/cosh/tanh/arsinh/arcosh/artanh a` — Hyperbolic functions.
-- `exp/ten a` — \(e^a\) and \(10^a\).
-- `usingrad` / `usingdeg` — Switch trig mode between radians and degrees (default `usingrad`).
+- `def a $10` / `del a`
+- `defstr s "text\x41"`
+- `add/sub/mul/div/fdiv a b`
+- `mod/fmod a b`
+- `pow/ipow a b`
+- `concatnum a b` — Purely textual concatenation of integers and fractions.
+- `abs/floor/ceil/round/dot a`
+- `lg/ln/log2 a`, `log a b`, `sin/cos/tan/arcsin/arccos/arctan a`
+- `sinh/cosh/tanh/arsinh/arcosh/artanh a`, `exp/ten a`
+- `usingrad` / `usingdeg`
 
 ## Strings
-- `s&index{N}` — Extract Nth byte (0-based). Negative `N` counts from right. Decimals truncate.
-
-## Bitwise (Truncated, absolute values)
-- `and/or/xor/nand/nor/nxor a b`
-- `not a`
+- `s&index{N}` — Extract Nth byte.
+- `s&find{d}` — Search for substring (if `d` is a string) or byte (if `d` is a number), returns index or `-1`.
 
 ## Control Flow
-- `if-eq A B ... endif` (also `ne`, `gt`, `ge`, `lt`, `le`)
+- `if-eq A B ... endif` OR `if-eq A B ... endif-else ... endelse`
 - `while-eq A B ... endwhile`
 - `loop N ... endloop`
-- `area ... endarea` — Dynamic scope block. Variables defined inside are destroyed at the end. Modifying external variables affects them globally.
+- `area ... endarea`
 - `break` / `continue`
 - `label #name` / `goto #name`
 
 ## Input
-- `input a` — Reads one character.
-- `inputstr a` — Reads a whole string.
-- `inputnum a` — Prompts for a hex number.
-- `inputdecnum a` — Prompts for a decimal number (converted to hex, 64 digits precision).
+- `input a`, `inputstr a`, `inputnum a`, `inputdecnum a`.
