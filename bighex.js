@@ -60,6 +60,12 @@ class BigHex {
   clone() { return new BigHex(this); }
   neg() { let r = this.clone(); if (!r.isZero()) r.sign *= -1; return r; }
   abs() { let r = this.clone(); r.sign = 1; return r; }
+  
+  dot() {
+    let r = this.clone();
+    r.int = [0];
+    return r;
+  }
 
   align(a, b) {
     const fLen = Math.max(a.frac.length, b.frac.length);
