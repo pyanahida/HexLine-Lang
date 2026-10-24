@@ -122,7 +122,7 @@ function exec(ins) {
     out(s); pc++; return 'ok';
   }
 
-  if (op === 'input' || op === 'inputstr' || op === 'inputnum' || op === 'inputdecnum') {
+  if (['input', 'inputstr', 'inputnum', 'inputdecnum', 'hinputstr', 'hinputnum', 'hinputdecnum'].includes(op)) {
     if (op === 'input') {
       pc++;
       pendingInput = { varName: parts[1], lineNo };
@@ -156,6 +156,19 @@ function exec(ins) {
     if (op === 'inputstr') { promptMsg = "Enter string:"; isStr = true; }
     else if (op === 'inputnum') { promptMsg = "Enter hex number (e.g. FFF.7A):"; }
     else if (op === 'inputdecnum') { promptMsg = "Enter decimal number (e.g. 123.45):"; isDec = true; }
+    else if (op.startsWith('hinput')) {
+      if (op === 'hinputstr') isStr = true;
+      else if (op === 'hinputdecnum') isDec = true;
+      
+      let hintTok = parts[2];
+      if (hintTok.startsWith('"') && hintTok.endsWith('"')) {
+        promptMsg = new TextDecoder(currentEncoding).decode(parseStrLiteral(hintTok));
+      } else if (hintTok in vars && vars[hintTok] instanceof Uint8Array) {
+        promptMsg = new TextDecoder(currentEncoding).decode(vars[hintTok]);
+      } else {
+        err(lineNo, 'invalid hint string'); return 'stop';
+      }
+    }
     
     return new Promise((resolve) => {
       setTimeout(() => {
@@ -437,6 +450,35 @@ function exec(ins) {
     result.sign = resSign;
     if (result.isZero()) result.sign = 1;
     vars[parts[1]] = result;
+    pc++; return 'ok';
+  }
+
+  if (op === 'concat') {
+    const aName = parts[1], bTok = parts[2];
+    if (!(aName in vars) || !(vars[aName] instanceof Uint8Array)) { err(lineNo, 'first operand must be a string'); return 'stop'; }
+    let bArr = null;
+    if (bTok.startsWith('"') && bTok.endsWith('"')) bArr = parseStrLiteral(bTok);
+    else if (bTok in vars && vars[bTok] instanceof Uint8Array) bArr = vars[bTok];
+    else { err(lineNo, 'second operand must be a string'); return 'stop'; }
+    
+    const newArr = new Uint8Array(vars[aName].length + bArr.length);
+    newArr.set(vars[aName], 0);
+    newArr.set(bArr, vars[aName].length);
+    vars[aName] = newArr;
+    pc++; return 'ok';
+  }
+
+  if (op === 'sum' || op === 'prod') {
+    const aName = parts[1], arrName = parts[2];
+    if (!(arrName in vars) || !Array.isArray(vars[arrName])) { err(lineNo, 'invalid array variable'); return 'stop'; }
+    const arr = vars[arrName];
+    
+    let res = new BigHex(op === 'sum' ? 0 : 1);
+    for (let i = 0; i < arr.length; i++) {
+      if (op === 'sum') res = res.add(arr[i]);
+      else res = res.mul(arr[i]);
+    }
+    vars[aName] = res;
     pc++; return 'ok';
   }
 
