@@ -101,7 +101,8 @@ printnum a
 - Built-in literals: `TRUE` (`$1`), `FALSE` (`$0`), `PI`, `E`. (These cannot be used as variable names).
 - No integer/float distinction.
 - **Arbitrary Precision**: Numbers are stored as hex arrays. Precision auto-expands as needed.
-- Non-terminating fractions are truncated to 32 hex digits.
+- Non-terminating fractions are truncated to 64 hex digits.
+- Built-in `PI` and `E` are accurate to 64 hex digits.
 
 ## Output
 - `print ...` — Outputs bytes/strings using the `using` encoding. NUL for out-of-range ints.
