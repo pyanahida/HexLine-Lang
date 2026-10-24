@@ -291,6 +291,51 @@ function exec(ins) {
     pc++; return 'ok';
   }
 
+  if (op === 'inputnum') {
+    const val = prompt("Enter hex number (e.g. FFF.7A):");
+    if (val !== null) {
+      try {
+        vars[parts[1]] = new BigHex(val.trim());
+      } catch (e) {
+        err(lineNo, 'invalid hex number'); return 'stop';
+      }
+    }
+    pc++; return 'ok';
+  }
+
+  if (op === 'inputdecnum') {
+    const val = prompt("Enter decimal number (e.g. 123.45):");
+    if (val !== null) {
+      let s = val.trim();
+      if (!/^-?\d+(\.\d+)?$/.test(s)) { err(lineNo, 'invalid decimal number'); return 'stop'; }
+      
+      let isNeg = s.startsWith('-');
+      if (isNeg) s = s.slice(1);
+      let partsDec = s.split('.');
+      let intPart = BigInt(partsDec[0] || '0');
+      let fracPart = partsDec[1] || '';
+      
+      let hexInt = intPart.toString(16);
+      let hexFrac = '';
+      let rem = BigInt(fracPart === '' ? '0' : fracPart);
+      let den = 10n ** BigInt(fracPart.length);
+      
+      for (let i = 0; i < 64; i++) {
+        rem *= 16n;
+        let digit = rem / den;
+        hexFrac += digit.toString(16);
+        rem %= den;
+        if (rem === 0n) break;
+      }
+      
+      let hexStr = hexInt + (hexFrac ? '.' + hexFrac : '');
+      if (isNeg) hexStr = '-' + hexStr;
+      
+      vars[parts[1]] = new BigHex(hexStr);
+    }
+    pc++; return 'ok';
+  }
+
   if (op === 'def') {
     const v = getVal(parts[2]);
     if (!v || v instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
