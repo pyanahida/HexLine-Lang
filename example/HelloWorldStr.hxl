@@ -1,2 +1,3 @@
 using utf-8
-print "Hello,\x20World!\x0A"
+defstr hello "Hello,\x20World!\x0A"
+print hello
