@@ -27,6 +27,38 @@ function err(line, msg) {
 }
 
 // ==========================================
+// Encoding Helpers (Bidirectional)
+// ==========================================
+const byteCache = {};
+function encodeText(str, encoding) {
+  if (encoding === 'utf-8') return new TextEncoder().encode(str);
+  
+  if (!byteCache[encoding]) {
+    byteCache[encoding] = {};
+    try {
+      const decoder = new TextDecoder(encoding);
+      for (let i = 0; i < 256; i++) {
+        const c = decoder.decode(new Uint8Array([i]));
+        if (c && c !== '\uFFFD') byteCache[encoding][c] = i;
+      }
+    } catch(e) {}
+  }
+  
+  const dict = byteCache[encoding];
+  const bytes = [];
+  for (let i = 0; i < str.length; i++) {
+    let char = str[i];
+    if (dict[char] !== undefined) {
+      bytes.push(dict[char]);
+    } else {
+      const encoded = new TextEncoder().encode(char);
+      for (let b of encoded) bytes.push(b);
+    }
+  }
+  return new Uint8Array(bytes);
+}
+
+// ==========================================
 // BigHex: Arbitrary Precision Hex Float Engine
 // ==========================================
 class BigHex {
@@ -263,7 +295,8 @@ class BigHex {
     }
     if (q.int.length === 0) q.int = [0];
 
-    for (let iter = 0; iter < 64; iter++) {
+    // 严格截取到 32 个十六进制小数位
+    for (let iter = 0; iter < 32; iter++) {
       r = r.mul(new BigHex(16));
       let d = 0;
       let B_abs = new BigHex(); B_abs.int = B; 
@@ -659,7 +692,7 @@ function start() {
         const val = e.target.value;
         if (!val) return;
         
-        const bytes = new TextEncoder().encode(val);
+        const bytes = encodeText(val, currentEncoding);
         vars[pendingInput.varName] = new BigHex(bytes[0]);
         
         pendingInput = null;
@@ -675,12 +708,9 @@ function start() {
     if (op === 'inputstr') {
       const val = prompt("Enter string:");
       if (val !== null) {
-        try {
-          const encoder = new TextEncoder(currentEncoding);
-          vars[parts[1]] = encoder.encode(val);
-        } catch (e) {
-          vars[parts[1]] = new TextEncoder().encode(val);
-        }
+        vars[parts[1]] = encodeText(val, currentEncoding);
+      } else {
+        vars[parts[1]] = new Uint8Array(0);
       }
       pc++; return 'ok';
     }
@@ -692,8 +722,6 @@ function start() {
     }
 
     if (op === 'defstr') {
-      // Fix: tokens split by space could break strings with spaces.
-      // Rejoin the remainder and strip quotes.
       let rawStr = ins.text.slice(ins.text.indexOf(parts[1]) + parts[1].length).trim();
       if (rawStr.startsWith('"') && rawStr.endsWith('"')) {
         const strVal = parseStrLiteral(rawStr);
