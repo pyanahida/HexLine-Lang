@@ -47,6 +47,26 @@ function parseStrLiteral(tok) {
   return new Uint8Array(bytes);
 }
 
+// 智能分离参数，能够识别带空格的字符串字面量
+function splitArgs(str) {
+  const args = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < str.length; i++) {
+    const c = str[i];
+    if (c === '"' && (i === 0 || str[i-1] !== '\\')) {
+      inQuotes = !inQuotes;
+      current += c;
+    } else if (/\s/.test(c) && !inQuotes) {
+      if (current) { args.push(current); current = ''; }
+    } else {
+      current += c;
+    }
+  }
+  if (current) args.push(current);
+  return args;
+}
+
 function getVal(tok) {
   if (isLiteral(tok)) return parseLiteral(tok);
   
@@ -65,7 +85,6 @@ function getVal(tok) {
       
       if (idxVal && vars[varName] instanceof Uint8Array) {
         let idxNum = idxVal.toNumber();
-        // 小数直接删除（向零截断）
         let index = idxNum < 0 ? Math.ceil(idxNum) : Math.floor(idxNum);
         
         const arr = vars[varName];
@@ -130,7 +149,7 @@ function bitwise2(op, a, b) {
 }
 
 function exec(ins) {
-  const parts = ins.text.split(/\s+/);
+  const parts = splitArgs(ins.text);
   const op = parts[0], lineNo = ins.lineNo;
 
   if (/^if-(eq|ne|gt|ge|lt|le)$/.test(op)) {
@@ -155,7 +174,7 @@ function exec(ins) {
   if (op === 'break') {
     let depth = 0, i = pc;
     for (; i < currentProg.length; i++) {
-      const t = currentProg[i].text.split(/\s+/)[0];
+      const t = splitArgs(currentProg[i].text)[0];
       if (/^while-/.test(t) || t === 'loop') depth++;
       else if (t === 'endwhile' || t === 'endloop') { if (depth === 0) break; depth--; }
     }
@@ -164,7 +183,7 @@ function exec(ins) {
   if (op === 'continue') {
     let depth = 0, i = pc;
     for (; i >= 0; i--) {
-      const t = currentProg[i].text.split(/\s+/)[0];
+      const t = splitArgs(currentProg[i].text)[0];
       if (t === 'endwhile' || t === 'endloop') depth++;
       else if (/^while-/.test(t) || t === 'loop') { if (depth === 0) break; depth--; }
     }
@@ -179,12 +198,6 @@ function exec(ins) {
   }
 
   if (op === 'loop') {
-    // loop 的状态需要隐藏存储在全局或重新计算，为了避免引入额外状态，
-    // 这里使用一个技巧：如果下一行是 endloop，或者我们可以在内部维护。
-    // 实际上，最简单的办法是在进入 loop 时将计数存在一个隐藏的变量或栈中。
-    // 但由于我们在单线程逐行执行，可以利用 match 反查。
-    
-    // 这里我们使用一个 Map 来记录当前的 loop 剩余次数。
     if (!globalThis.loopCounters) globalThis.loopCounters = {};
     const loopId = pc;
     
