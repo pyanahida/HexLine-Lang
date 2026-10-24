@@ -47,7 +47,6 @@ function parseStrLiteral(tok) {
   return new Uint8Array(bytes);
 }
 
-// 智能分离参数，能够识别带空格的字符串字面量
 function splitArgs(str) {
   const args = [];
   let current = '';
@@ -106,7 +105,7 @@ function getVal(tok) {
 function buildMatches(prog) {
   const map = {}, stack = [];
   for (let i = 0; i < prog.length; i++) {
-    const t = prog[i].text.split(/\s+/)[0];
+    const t = splitArgs(prog[i].text)[0];
     if (/^if-(eq|ne|gt|ge|lt|le)$/.test(t)) stack.push({ type: 'if', i });
     else if (/^while-(eq|ne|gt|ge|lt|le)$/.test(t)) stack.push({ type: 'while', i });
     else if (t === 'loop') stack.push({ type: 'loop', i });
@@ -200,7 +199,6 @@ function exec(ins) {
   if (op === 'loop') {
     if (!globalThis.loopCounters) globalThis.loopCounters = {};
     const loopId = pc;
-    
     if (globalThis.loopCounters[loopId] === undefined) {
       const countVal = getVal(parts[1]);
       if (!countVal || countVal instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
@@ -208,11 +206,7 @@ function exec(ins) {
       n = n < 0 ? Math.ceil(n) : Math.floor(n);
       globalThis.loopCounters[loopId] = n > 0 ? n : 0;
     }
-    
-    if (globalThis.loopCounters[loopId] <= 0) {
-      pc = currentMatch[pc] + 1;
-      return 'jumped';
-    }
+    if (globalThis.loopCounters[loopId] <= 0) { pc = currentMatch[pc] + 1; return 'jumped'; }
     globalThis.loopCounters[loopId]--;
     pc++; return 'ok';
   }
@@ -313,6 +307,18 @@ function exec(ins) {
     pc++; return 'ok';
   }
 
+  if (op === 'del') {
+    delete vars[parts[1]];
+    pc++; return 'ok';
+  }
+
+  if (op === 'dot') {
+    const v = getVal(parts[1]);
+    if (!v || v instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+    vars[parts[1]] = v.dot();
+    pc++; return 'ok';
+  }
+
   if (['add', 'sub', 'mul', 'div', 'fdiv'].includes(op)) {
     const a = getVal(parts[1]), b = getVal(parts[2]);
     if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
@@ -344,6 +350,38 @@ function exec(ins) {
     try { r = (op === 'pow') ? a.pow(b) : a.ipow(b); } 
     catch (e) { err(lineNo, e.message); return 'stop'; }
     vars[parts[1]] = r; pc++; return 'ok';
+  }
+
+  if (op === 'log') {
+    const a = getVal(parts[1]), b = getVal(parts[2]);
+    if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+    try {
+      let an = a.toNumber(), bn = b.toNumber();
+      if (an <= 0 || bn <= 0 || bn === 1) throw new Error('Math domain error');
+      vars[parts[1]] = new BigHex((Math.log(an) / Math.log(bn)).toString(16));
+    } catch (e) { err(lineNo, e.message); return 'stop'; }
+    pc++; return 'ok';
+  }
+
+  if (['lg', 'ln', 'log2', 'sin', 'cos', 'tan', 'arcsin', 'arccos', 'arctan'].includes(op)) {
+    const a = getVal(parts[1]);
+    if (!a || a instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+    try {
+      let an = a.toNumber(), rn = 0;
+      if (op === 'lg') { if (an <= 0) throw new Error(); rn = Math.log10(an); }
+      else if (op === 'ln') { if (an <= 0) throw new Error(); rn = Math.log(an); }
+      else if (op === 'log2') { if (an <= 0) throw new Error(); rn = Math.log2(an); }
+      else if (op === 'sin') rn = Math.sin(an);
+      else if (op === 'cos') rn = Math.cos(an);
+      else if (op === 'tan') rn = Math.tan(an);
+      else if (op === 'arcsin') { if (an < -1 || an > 1) throw new Error(); rn = Math.asin(an); }
+      else if (op === 'arccos') { if (an < -1 || an > 1) throw new Error(); rn = Math.acos(an); }
+      else if (op === 'arctan') rn = Math.atan(an);
+      
+      if (isNaN(rn)) throw new Error('Math domain error');
+      vars[parts[1]] = new BigHex(rn.toString(16));
+    } catch (e) { err(lineNo, 'Math domain error'); return 'stop'; }
+    pc++; return 'ok';
   }
 
   if (op === 'abs' || op === 'floor' || op === 'ceil' || op === 'round') {
