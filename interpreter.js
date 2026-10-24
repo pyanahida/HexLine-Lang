@@ -9,7 +9,7 @@ function exec(ins) {
 
   if (/^if-(eq|ne|gt|ge|lt|le)$/.test(op)) {
     const a = getVal(parts[1]), b = getVal(parts[2]);
-    if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+    if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array || Array.isArray(a) || Array.isArray(b)) { err(lineNo, 'invalid operand'); return 'stop'; }
     if (!cmp(op.slice(3), a, b)) { pc = currentMatch[pc] + 1; return 'jumped'; }
     pc++; return 'ok';
   }
@@ -20,7 +20,7 @@ function exec(ins) {
 
   if (/^while-(eq|ne|gt|ge|lt|le)$/.test(op)) {
     const a = getVal(parts[1]), b = getVal(parts[2]);
-    if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+    if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array || Array.isArray(a) || Array.isArray(b)) { err(lineNo, 'invalid operand'); return 'stop'; }
     if (!cmp(op.slice(6), a, b)) { pc = currentMatch[pc] + 1; return 'jumped'; }
     pc++; return 'ok';
   }
@@ -63,7 +63,7 @@ function exec(ins) {
     const loopId = pc;
     if (globalThis.loopCounters[loopId] === undefined) {
       const countVal = getVal(parts[1]);
-      if (!countVal || countVal instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+      if (!countVal || countVal instanceof Uint8Array || Array.isArray(countVal)) { err(lineNo, 'invalid operand'); return 'stop'; }
       let n = countVal.toNumber();
       n = n < 0 ? Math.ceil(n) : Math.floor(n);
       globalThis.loopCounters[loopId] = n > 0 ? n : 0;
@@ -92,7 +92,7 @@ function exec(ins) {
         bytes.push(...vars[tok]);
       } else {
         const v = getVal(tok);
-        if (!v || v instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+        if (!v || v instanceof Uint8Array || Array.isArray(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
         if (v.isInteger() && v.sign > 0) {
           let num = v.toNumber();
           if (num >= 0 && num <= 255) bytes.push(num); else bytes.push(0);
@@ -107,7 +107,7 @@ function exec(ins) {
     let s = '';
     for (let i = 1; i < parts.length; i++) {
       const v = getVal(parts[i]);
-      if (!v || v instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+      if (!v || v instanceof Uint8Array || Array.isArray(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
       s += v.toString();
     }
     out(s); pc++; return 'ok';
@@ -116,7 +116,7 @@ function exec(ins) {
     let s = '';
     for (let i = 1; i < parts.length; i++) {
       const v = getVal(parts[i]);
-      if (!v || v instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+      if (!v || v instanceof Uint8Array || Array.isArray(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
       s += v.toNumber().toString();
     }
     out(s); pc++; return 'ok';
@@ -157,53 +157,53 @@ function exec(ins) {
     else if (op === 'inputnum') { promptMsg = "Enter hex number (e.g. FFF.7A):"; }
     else if (op === 'inputdecnum') { promptMsg = "Enter decimal number (e.g. 123.45):"; isDec = true; }
     
-    // 这里不再直接调用 runLoop，而是等待用户的回调
-    showDialog(promptMsg, isStr).then(val => {
-      if (val !== null) {
-        if (isStr) {
-          vars[parts[1]] = encodeText(val, currentEncoding);
-        } else if (isDec) {
-          let s = val.trim();
-          if (!/^-?\d+(\.\d+)?$/.test(s)) { err(lineNo, 'invalid decimal number'); return; }
-          let isNeg = s.startsWith('-');
-          if (isNeg) s = s.slice(1);
-          let partsDec = s.split('.');
-          let intPart = BigInt(partsDec[0] || '0');
-          let fracPart = partsDec[1] || '';
-          let hexInt = intPart.toString(16);
-          let hexFrac = '';
-          let rem = BigInt(fracPart === '' ? '0' : fracPart);
-          let den = 10n ** BigInt(fracPart.length);
-          for (let i = 0; i < 64; i++) {
-            rem *= 16n;
-            let digit = rem / den;
-            hexFrac += digit.toString(16);
-            rem %= den;
-            if (rem === 0n) break;
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        showDialog(promptMsg, isStr).then(val => {
+          if (val !== null) {
+            if (isStr) {
+              vars[parts[1]] = encodeText(val, currentEncoding);
+            } else if (isDec) {
+              let s = val.trim();
+              if (!/^-?\d+(\.\d+)?$/.test(s)) { err(lineNo, 'invalid decimal number'); resolve('stop'); return; }
+              let isNeg = s.startsWith('-');
+              if (isNeg) s = s.slice(1);
+              let partsDec = s.split('.');
+              let intPart = BigInt(partsDec[0] || '0');
+              let fracPart = partsDec[1] || '';
+              let hexInt = intPart.toString(16);
+              let hexFrac = '';
+              let rem = BigInt(fracPart === '' ? '0' : fracPart);
+              let den = 10n ** BigInt(fracPart.length);
+              for (let i = 0; i < 64; i++) {
+                rem *= 16n;
+                let digit = rem / den;
+                hexFrac += digit.toString(16);
+                rem %= den;
+                if (rem === 0n) break;
+              }
+              let hexStr = hexInt + (hexFrac ? '.' + hexFrac : '');
+              if (isNeg) hexStr = '-' + hexStr;
+              vars[parts[1]] = new BigHex(hexStr);
+            } else {
+              try {
+                vars[parts[1]] = new BigHex(val.trim());
+              } catch (e) { err(lineNo, 'invalid hex number'); resolve('stop'); return; }
+            }
+            if (areaStack.length > 0) areaStack[areaStack.length - 1].push(parts[1]);
           }
-          let hexStr = hexInt + (hexFrac ? '.' + hexFrac : '');
-          if (isNeg) hexStr = '-' + hexStr;
-          vars[parts[1]] = new BigHex(hexStr);
-        } else {
-          try {
-            vars[parts[1]] = new BigHex(val.trim());
-          } catch (e) { err(lineNo, 'invalid hex number'); return; }
-        }
-        if (areaStack.length > 0) areaStack[areaStack.length - 1].push(parts[1]);
-      }
-      
-      // 关键点：输入完成后，恢复循环。此时前面的 print 已经通过主线程渲染了
-      runLoop();
+          pc++;
+          resolve('ok');
+        });
+      }, 10); 
     });
-    
-    return 'pause';
   }
 
   if (op === 'def' || op === 'defstr') {
     if (['TRUE', 'FALSE', 'PI', 'E', 'RANDOM', 'TIME'].includes(parts[1])) { err(lineNo, 'reserved literal cannot be a variable'); return 'stop'; }
     if (op === 'def') {
       const v = getVal(parts[2]);
-      if (!v || v instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+      if (!v || v instanceof Uint8Array || Array.isArray(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
       vars[parts[1]] = v; 
     } else {
       let rawStr = ins.text.slice(ins.text.indexOf(parts[1]) + parts[1].length).trim();
@@ -216,20 +216,106 @@ function exec(ins) {
     if (areaStack.length > 0) areaStack[areaStack.length - 1].push(parts[1]);
     pc++; return 'ok';
   }
+  
+  if (op === 'defarr') {
+    const varName = parts[1];
+    let arr = [];
+    for (let i = 2; i < parts.length; i++) {
+      const v = getVal(parts[i]);
+      if (!v || v instanceof Uint8Array || Array.isArray(v)) { err(lineNo, 'invalid array element'); return 'stop'; }
+      arr.push(v);
+    }
+    vars[varName] = arr;
+    if (areaStack.length > 0) areaStack[areaStack.length - 1].push(varName);
+    pc++; return 'ok';
+  }
 
-  if (op === 'del') { delete vars[parts[1]]; pc++; return 'ok'; }
+  if (op === 'append') {
+    const arrName = parts[1];
+    if (!(arrName in vars) || !Array.isArray(vars[arrName])) { err(lineNo, 'invalid array variable'); return 'stop'; }
+    const v = getVal(parts[2]);
+    if (!v || v instanceof Uint8Array || Array.isArray(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
+    vars[arrName].push(v);
+    pc++; return 'ok';
+  }
+
+  if (op === 'allclear') {
+    const arrName = parts[1];
+    if (!(arrName in vars) || !Array.isArray(vars[arrName])) { err(lineNo, 'invalid array variable'); return 'stop'; }
+    vars[arrName] = [];
+    pc++; return 'ok';
+  }
+
+  if (op === 'exchange') {
+    const arrName = parts[1];
+    if (!(arrName in vars) || !Array.isArray(vars[arrName])) { err(lineNo, 'invalid array variable'); return 'stop'; }
+    
+    const idxVal = getVal(parts[2]);
+    const placeVal = getVal(parts[3]);
+    const xVal = getVal(parts[4]);
+    
+    if (!idxVal || idxVal instanceof Uint8Array || Array.isArray(idxVal)) { err(lineNo, 'invalid index'); return 'stop'; }
+    if (!placeVal || placeVal instanceof Uint8Array || Array.isArray(placeVal)) { err(lineNo, 'invalid place'); return 'stop'; }
+    if (!xVal || xVal instanceof Uint8Array || Array.isArray(xVal)) { err(lineNo, 'invalid value'); return 'stop'; }
+    
+    let nIdx = idxVal.toNumber();
+    nIdx = nIdx < 0 ? Math.ceil(nIdx) : Math.floor(nIdx);
+    let nPlace = placeVal.toNumber();
+    nPlace = nPlace < 0 ? Math.ceil(nPlace) : Math.floor(nPlace);
+    
+    const arr = vars[arrName];
+    let targetIdx = nIdx >= 0 ? nIdx : arr.length + nIdx;
+    
+    if (targetIdx < 0 || targetIdx >= arr.length) { err(lineNo, 'index out of bounds'); return 'stop'; }
+    
+    if (nPlace === 0) {
+      arr[targetIdx] = xVal;
+    } else if (nPlace < 0) {
+      arr.splice(targetIdx, 0, xVal);
+    } else {
+      arr.splice(targetIdx + 1, 0, xVal);
+    }
+    pc++; return 'ok';
+  }
+
+  if (op === 'del') {
+    if (parts.length === 3) {
+      const arrName = parts[1];
+      if (!(arrName in vars) || !Array.isArray(vars[arrName])) { err(lineNo, 'invalid array variable'); return 'stop'; }
+      const idxVal = getVal(parts[2]);
+      if (!idxVal || idxVal instanceof Uint8Array || Array.isArray(idxVal)) { err(lineNo, 'invalid index'); return 'stop'; }
+      
+      let nIdx = idxVal.toNumber();
+      nIdx = nIdx < 0 ? Math.ceil(nIdx) : Math.floor(nIdx);
+      const arr = vars[arrName];
+      let targetIdx = nIdx >= 0 ? nIdx : arr.length + nIdx;
+      
+      if (targetIdx < 0 || targetIdx >= arr.length) { err(lineNo, 'index out of bounds'); return 'stop'; }
+      arr.splice(targetIdx, 1);
+    } else {
+      delete vars[parts[1]];
+    }
+    pc++; return 'ok';
+  }
+
   if (op === 'dot') {
     const v = getVal(parts[1]);
-    if (!v || v instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+    if (!v || v instanceof Uint8Array || Array.isArray(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
     vars[parts[1]] = v.dot(); pc++; return 'ok';
   }
   
   if (op === 'swap') {
     const a = parts[1], b = parts[2];
     if (!(a in vars) || !(b in vars)) { err(lineNo, 'undefined variable'); return 'stop'; }
+    
+    const isAArr = Array.isArray(vars[a]);
+    const isBArr = Array.isArray(vars[b]);
+    if (isAArr !== isBArr) { err(lineNo, 'cannot swap different types'); return 'stop'; }
+    
     const typeA = vars[a] instanceof Uint8Array ? 'str' : 'num';
     const typeB = vars[b] instanceof Uint8Array ? 'str' : 'num';
-    if (typeA !== typeB) { err(lineNo, 'cannot swap different types'); return 'stop'; }
+    if (!isAArr && typeA !== typeB) { err(lineNo, 'cannot swap different types'); return 'stop'; }
+    
     const tmp = vars[a];
     vars[a] = vars[b];
     vars[b] = tmp;
@@ -238,7 +324,7 @@ function exec(ins) {
 
   if (op.startsWith('sleep-')) {
     const v = getVal(parts[1]);
-    if (!v || v instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+    if (!v || v instanceof Uint8Array || Array.isArray(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
     let num = Math.abs(v.toNumber());
     let ms = 0;
     if (op === 'sleep-s') ms = num * 1000;
@@ -258,7 +344,7 @@ function exec(ins) {
 
   if (['add', 'sub', 'mul', 'div', 'fdiv'].includes(op)) {
     const a = getVal(parts[1]), b = getVal(parts[2]);
-    if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+    if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array || Array.isArray(a) || Array.isArray(b)) { err(lineNo, 'invalid operand'); return 'stop'; }
     let r;
     try {
       switch (op) {
@@ -272,7 +358,7 @@ function exec(ins) {
 
   if (['mod', 'fmod'].includes(op)) {
     const a = getVal(parts[1]), b = getVal(parts[2]);
-    if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+    if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array || Array.isArray(a) || Array.isArray(b)) { err(lineNo, 'invalid operand'); return 'stop'; }
     if (op === 'mod' && !b.isInteger()) { err(lineNo, 'mod requires integer divisor'); return 'stop'; }
     let r;
     try { r = (op === 'mod') ? a.mod(b) : a.fmod(b); } 
@@ -282,7 +368,7 @@ function exec(ins) {
 
   if (op === 'pow' || op === 'ipow') {
     const a = getVal(parts[1]), b = getVal(parts[2]);
-    if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+    if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array || Array.isArray(a) || Array.isArray(b)) { err(lineNo, 'invalid operand'); return 'stop'; }
     let r;
     try { r = (op === 'pow') ? a.pow(b) : a.ipow(b); } 
     catch (e) { err(lineNo, e.message); return 'stop'; }
@@ -291,7 +377,7 @@ function exec(ins) {
 
   if (op === 'log') {
     const a = getVal(parts[1]), b = getVal(parts[2]);
-    if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+    if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array || Array.isArray(a) || Array.isArray(b)) { err(lineNo, 'invalid operand'); return 'stop'; }
     try {
       let an = a.toNumber(), bn = b.toNumber();
       if (an <= 0 || bn <= 0 || bn === 1) throw new Error('Math domain error');
@@ -302,7 +388,7 @@ function exec(ins) {
 
   if (['lg', 'ln', 'log2', 'sin', 'cos', 'tan', 'arcsin', 'arccos', 'arctan', 'sinh', 'cosh', 'tanh', 'arsinh', 'arcosh', 'artanh', 'exp', 'ten'].includes(op)) {
     const a = getVal(parts[1]);
-    if (!a || a instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+    if (!a || a instanceof Uint8Array || Array.isArray(a)) { err(lineNo, 'invalid operand'); return 'stop'; }
     try {
       let an = a.toNumber(), rn = 0;
       let trigIn = an;
@@ -336,7 +422,7 @@ function exec(ins) {
 
   if (op === 'concatnum') {
     const a = getVal(parts[1]), b = getVal(parts[2]);
-    if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+    if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array || Array.isArray(a) || Array.isArray(b)) { err(lineNo, 'invalid operand'); return 'stop'; }
     let resSign = (a.sign === b.sign) ? 1 : -1;
     let strA = a.abs().toString(), strB = b.abs().toString();
     let partsA = strA.split('.'), partsB = strB.split('.');
@@ -356,7 +442,7 @@ function exec(ins) {
 
   if (op === 'abs' || op === 'floor' || op === 'ceil' || op === 'round') {
     const a = getVal(parts[1]);
-    if (!a || a instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+    if (!a || a instanceof Uint8Array || Array.isArray(a)) { err(lineNo, 'invalid operand'); return 'stop'; }
     let r;
     switch (op) {
       case 'abs': r = a.abs(); break; case 'floor': r = a.floor(); break;
@@ -367,12 +453,12 @@ function exec(ins) {
 
   if (['and', 'or', 'nand', 'nor', 'xor', 'nxor'].includes(op)) {
     const a = getVal(parts[1]), b = getVal(parts[2]);
-    if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+    if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array || Array.isArray(a) || Array.isArray(b)) { err(lineNo, 'invalid operand'); return 'stop'; }
     vars[parts[1]] = bitwise2(op, a, b); pc++; return 'ok';
   }
   if (op === 'not') {
     const a = getVal(parts[1]);
-    if (!a || a instanceof Uint8Array) { err(lineNo, 'invalid operand'); return 'stop'; }
+    if (!a || a instanceof Uint8Array || Array.isArray(a)) { err(lineNo, 'invalid operand'); return 'stop'; }
     const t = a.abs().floor().toNumber();
     const w = Math.max(1, Math.floor(Math.log2(t || 1)) + 1);
     vars[parts[1]] = new BigHex((~t) & ((1 << w) - 1)); pc++; return 'ok';
@@ -382,15 +468,17 @@ function exec(ins) {
   return 'stop';
 }
 
-// 核心修复：使用 setTimeout 让出主线程，强制浏览器渲染 UI
-function runLoop() {
-  if (!running) return;
-  if (pc >= currentProg.length) { running = false; return; }
-  
-  const r = exec(currentProg[pc]);
-  if (r === 'stop') { running = false; return; }
-  if (r === 'pause') { return; }
-  
-  // 将下一次循环放入事件队列，确保浏览器有时间渲染 print 的内容
-  setTimeout(runLoop, 0);
+async function runLoop() {
+  while (running && pc < currentProg.length) {
+    const r = exec(currentProg[pc]);
+    if (r instanceof Promise) {
+      const res = await r;
+      if (res === 'stop') { running = false; return; }
+      continue; 
+    }
+    
+    if (r === 'stop') { running = false; return; }
+    if (r === 'pause') { return; }
+  }
+  running = false;
 }
