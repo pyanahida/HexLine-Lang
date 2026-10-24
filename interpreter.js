@@ -152,14 +152,12 @@ function exec(ins) {
       return 'pause';
     }
     
-    // 异步弹窗逻辑
     let promptMsg = "", isDec = false, isStr = false;
     if (op === 'inputstr') { promptMsg = "Enter string:"; isStr = true; }
     else if (op === 'inputnum') { promptMsg = "Enter hex number (e.g. FFF.7A):"; }
     else if (op === 'inputdecnum') { promptMsg = "Enter decimal number (e.g. 123.45):"; isDec = true; }
     
-    // 暂停 VM 执行，等待 Promise 返回
-    running = false;
+    // 这里不再直接调用 runLoop，而是等待用户的回调
     showDialog(promptMsg, isStr).then(val => {
       if (val !== null) {
         if (isStr) {
@@ -193,8 +191,8 @@ function exec(ins) {
         }
         if (areaStack.length > 0) areaStack[areaStack.length - 1].push(parts[1]);
       }
-      // 输入完成，恢复执行
-      running = true;
+      
+      // 关键点：输入完成后，恢复循环。此时前面的 print 已经通过主线程渲染了
       runLoop();
     });
     
@@ -384,11 +382,15 @@ function exec(ins) {
   return 'stop';
 }
 
+// 核心修复：使用 setTimeout 让出主线程，强制浏览器渲染 UI
 function runLoop() {
-  while (running && pc < currentProg.length) {
-    const r = exec(currentProg[pc]);
-    if (r === 'stop') { running = false; return; }
-    if (r === 'pause') { return; }
-  }
-  running = false;
+  if (!running) return;
+  if (pc >= currentProg.length) { running = false; return; }
+  
+  const r = exec(currentProg[pc]);
+  if (r === 'stop') { running = false; return; }
+  if (r === 'pause') { return; }
+  
+  // 将下一次循环放入事件队列，确保浏览器有时间渲染 print 的内容
+  setTimeout(runLoop, 0);
 }
