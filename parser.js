@@ -127,6 +127,60 @@ function getVal(tok) {
         let targetIdx = index >= 0 ? index : arr.length + index;
         return (targetIdx >= 0 && targetIdx < arr.length) ? new BigHex(arr[targetIdx]) : new BigHex(-1);
       }
+      else if (idxVal && Array.isArray(vars[varName])) {
+        let idxNum = idxVal.toNumber();
+        let index = idxNum < 0 ? Math.ceil(idxNum) : Math.floor(idxNum);
+        const arr = vars[varName];
+        let targetIdx = index >= 0 ? index : arr.length + index;
+        if (targetIdx < 0 || targetIdx >= arr.length) throw new Error('index out of bounds');
+        return arr[targetIdx];
+      }
+    }
+    return null;
+  }
+  
+  if (tok.endsWith('&len')) {
+    const varName = tok.slice(0, -4);
+    if (varName in vars && Array.isArray(vars[varName])) {
+      return new BigHex(vars[varName].length);
+    }
+    return null;
+  }
+
+  if (tok.includes('&include{')) {
+    const match = tok.match(/^([a-zA-Z0-9_]+)&include\{(.+)\}$/);
+    if (match) {
+      const varName = match[1];
+      let valTok = match[2];
+      let targetVal = null;
+      if (valTok.startsWith('$')) targetVal = new BigHex(valTok.slice(1));
+      else if (valTok in vars && vars[valTok] instanceof BigHex) targetVal = vars[valTok];
+      
+      if (targetVal && Array.isArray(vars[varName])) {
+        const arr = vars[varName];
+        const found = arr.some(item => item.toString() === targetVal.toString());
+        return new BigHex(found ? 1 : 0);
+      }
+    }
+    return null;
+  }
+
+  if (tok.includes('&findfirst{')) {
+    const match = tok.match(/^([a-zA-Z0-9_]+)&findfirst\{(.+)\}$/);
+    if (match) {
+      const varName = match[1];
+      let valTok = match[2];
+      let targetVal = null;
+      if (valTok.startsWith('$')) targetVal = new BigHex(valTok.slice(1));
+      else if (valTok in vars && vars[valTok] instanceof BigHex) targetVal = vars[valTok];
+      
+      if (targetVal && Array.isArray(vars[varName])) {
+        const arr = vars[varName];
+        for (let i = 0; i < arr.length; i++) {
+          if (arr[i].toString() === targetVal.toString()) return new BigHex(i);
+        }
+        return new BigHex(-1);
+      }
     }
     return null;
   }
