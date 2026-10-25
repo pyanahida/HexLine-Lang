@@ -226,6 +226,27 @@ function getVal(tok) {
     return null;
   }
 
+  if (tok.includes('&join{')) {
+    const match = tok.match(/^([a-zA-Z0-9_]+)&join\{(.+)\}$/);
+    if (match) {
+      const arrName = match[1];
+      let sepTok = match[2];
+      let sepBytes = null;
+      if (sepTok.startsWith('"') && sepTok.endsWith('"')) {
+        sepBytes = parseStrLiteral(sepTok);
+      } else if (sepTok in vars && vars[sepTok] instanceof Uint8Array) {
+        sepBytes = vars[sepTok];
+      }
+      
+      if (sepBytes && Array.isArray(vars[arrName])) {
+        let strs = vars[arrName].map(item => item.toString());
+        let joined = strs.join(new TextDecoder(currentEncoding).decode(sepBytes));
+        return encodeText(joined, currentEncoding);
+      }
+      return null;
+    }
+  }
+
   if (tok in vars) return vars[tok];
   return null;
 }
