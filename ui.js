@@ -12,29 +12,40 @@ $file.addEventListener('change', e => {
   r.readAsText(f, 'utf-8');
 });
 
-$run.addEventListener('click', () => {
-  if (running) return;
+// 修复：在点击按钮时，重置所有状态并正确调用异步的 runLoop
+$run.addEventListener('click', async () => {
   $con.textContent = '';
   vars = {}; labels = {}; pc = 0; running = true; pendingInput = null;
+  areaStack = [];
+  if (globalThis.loopCounters) globalThis.loopCounters = {};
 
-  const res = parse($code.value);
-  if (res.err) { err(0, res.err); return; }
-  currentProg = res.prog;
-  currentEncoding = res.encoding;
+  try {
+    const res = parse($code.value);
+    if (res.err) { err(0, res.err); return; }
+    currentProg = res.prog;
+    currentEncoding = res.encoding;
 
-  for (const ins of currentProg) {
-    const m = ins.text.match(/^label\s+(#[a-zA-Z0-9_]+)$/);
-    if (m) labels[m[1]] = currentProg.indexOf(ins);
+    for (const ins of currentProg) {
+      const m = ins.text.match(/^label\s+(#[a-zA-Z0-9_]+)$/);
+      if (m) labels[m[1]] = currentProg.indexOf(ins);
+    }
+
+    const match = buildMatches(currentProg);
+    if (match.err) { err(match.err.line, match.err.msg); return; }
+    currentMatch = match;
+
+    // 注意这里：因为 runLoop 是 async 的，需要 await 或者直接调用让它自己跑
+    await runLoop();
+  } catch (e) {
+    err(0, 'Fatal Error: ' + e.message);
   }
-
-  const match = buildMatches(currentProg);
-  if (match.err) { err(match.err.line, match.err.msg); return; }
-  currentMatch = match;
-
-  runLoop();
 });
 
-function out(s) { $con.textContent += s; }
+function out(s) { 
+  $con.textContent += s; 
+  $con.scrollTop = $con.scrollHeight;
+}
+
 function err(line, msg) {
   $con.textContent += (($con.textContent && !$con.textContent.endsWith('\n')) ? '\n' : '') + `Error line ${line}: ${msg}\n`;
   $con.scrollTop = $con.scrollHeight;
