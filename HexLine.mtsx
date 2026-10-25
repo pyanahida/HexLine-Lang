@@ -1,0 +1,118 @@
+// require MT >= 2.26.10
+// Author: pyanahida (AWGZYXDCZS)
+// This is a highlight-file about HexLine-Lang
+// Installing it within the MT manager allows you to enjoy code highlighting
+{
+    name: ["HexLine-Lang", ".hxl"]
+    ignoreCase: true
+    
+    styles: [
+        "encode" > "constant" @I
+    ]
+    
+    comment: {startsWith: "//"}
+    
+    defines: [
+        // Match encodings
+        "encode": {
+            match: /(?<=using\s+)/ + keywordsToRegex(
+                "utf-8 utf-16-le utf-16-be utf-32-le utf-32-be gbk windows-1252 iso-8859-1"
+            )
+            0: "encode"
+        }
+        // Number literal
+        "number": {
+            match: /\$-?[0-9A-Fa-f]+(.[0-9A-Fa-f]+)?/
+            0: "number"
+        }
+        // Keywords
+        "keyword": [
+            // The "using" which at 1st line
+            {
+                match: /\Ausing\b/
+                0: "keyword"
+            }
+            // Irregular
+            {
+                match: /(?<=\n\s*)/ + keywordsToRegex(
+                    "def defstr del swap area endarea" +
+                    "add sub mul div fdiv mod fmod pow ipow concatnum" +
+                    "abs floor ceil round dot" +
+                    "and or not xor nand nor xnor" +
+                    "lg ln log2 log exp ten" +
+                    "label goto usingrad usingdeg" +
+                    "loop endloop endif endwhile endif-else endelse" +
+                    "defarr append allclear exchange sum prod" +
+                    "concat break continue" +
+                    "deli digitsave"
+                ) + /\b/
+                0: "keyword"
+            }
+            // Judgements like ge, gt
+            {
+                match: /(?<=\n\s*)(if|while)-(lt|le|gt|ge|eq|ne)\b/
+                0: "keyword"
+            }
+            // IO
+            {
+                match: /(?<=\n\s*)(print|input)(num|decnum)?\b/
+                0: "keyword"
+            }
+            // Other inputs
+            {
+                match: /(?<=\n\s*)(inputstr|hinput(num|decnum|str))\b/
+                0: "keyword"
+            }
+            // Code stop
+            {
+                match: /(?<=\n\s*)sleep-(s|ms|us|min|hour|day|week)\b/
+            }
+        ]
+        // Match string
+        "string": {
+            start: {match: /"/, 0: "string"}
+            end: {match: /"/, 0: "string"}
+            style: "string"
+            contains: [
+                {match: /\\([\\"]|x[0-9A-Za-z]{2})/, 0: "strEscape"} 
+                {match: /\\./, 0: "error"} 
+            ]
+        }
+        // Curly braces usually indicate parameter passing
+        "inputnum": {
+            start: {match: /\{/, 0:"namespace"}
+            end: {match: /\}/, 0:"namespace"}
+            contains: [
+                // Writing numbers here is allowed
+                {include: "number"}
+            ]
+        }
+        // Methods of strings and arrays
+        "method": {
+            match: /(?<=[A-Za-z0-9_])&[a-zA-Z]/
+            0: "operator"
+        }
+        // Keywords of constants
+        "const": {
+            match: keywordsToRegex(
+                "TRUE FALSE PI E RANDOM TIME RANDINT"
+            )
+            0: "type"
+        }
+        // The label of goto
+        "label": {
+            match: /#[a-zA-Z_][0-9a-zA-Z_]*\b/
+            0: "variable"
+        }
+    ]
+    contains: [
+        {include: "string"}
+        {include: "number"}
+        {include: "encode"}
+        {include: "keyword"}
+        {include: "method"}
+        {include: "inputnum"}
+        {include: "const"}
+        {include: "label"}
+    ]
+}
