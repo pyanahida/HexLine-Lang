@@ -224,17 +224,27 @@ function exec(ins) {
     pc++; return 'ok';
   }
   
-  if (op === 'defarr') {
+  if (op === 'defarr' || op === 'defstrarr') {
     const varName = parts[1];
     if (parts.length === 3 && parts[2].startsWith('RANGE{')) {
+      if (op === 'defstrarr') { err(lineNo, 'cannot use RANGE with string array'); return 'stop'; }
       const arr = getVal(parts[2]);
       if (!Array.isArray(arr)) { err(lineNo, 'invalid RANGE'); return 'stop'; }
       vars[varName] = arr;
+    } else if (parts.length === 2) {
+      vars[varName] = [];
+    } else if (parts.length === 3 && (parts[2].startsWith('"') || parts[2] in vars)) {
+      // 可能是 defstrarr s str&divide{...} 或者直接赋值变量
+      const v = getVal(parts[2]);
+      if (!Array.isArray(v)) { err(lineNo, 'invalid array expression'); return 'stop'; }
+      vars[varName] = v;
     } else {
       let arr = [];
       for (let i = 2; i < parts.length; i++) {
         const v = getVal(parts[i]);
-        if (!v || v instanceof Uint8Array || Array.isArray(v)) { err(lineNo, 'invalid array element'); return 'stop'; }
+        if (!v || Array.isArray(v)) { err(lineNo, 'invalid array element'); return 'stop'; }
+        if (op === 'defarr' && v instanceof Uint8Array) { err(lineNo, 'defarr requires numbers'); return 'stop'; }
+        if (op === 'defstrarr' && !(v instanceof Uint8Array)) { err(lineNo, 'defstrarr requires strings'); return 'stop'; }
         arr.push(v);
       }
       vars[varName] = arr;
@@ -247,7 +257,14 @@ function exec(ins) {
     const arrName = parts[1];
     if (!(arrName in vars) || !Array.isArray(vars[arrName])) { err(lineNo, 'invalid array variable'); return 'stop'; }
     const v = getVal(parts[2]);
-    if (!v || v instanceof Uint8Array || Array.isArray(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
+    if (!v || Array.isArray(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
+    
+    // 简单的类型一致性检查
+    if (vars[arrName].length > 0) {
+      const isTargetNum = !(vars[arrName][0] instanceof Uint8Array);
+      if (isTargetNum && v instanceof Uint8Array) { err(lineNo, 'type mismatch in array'); return 'stop'; }
+      if (!isTargetNum && !(v instanceof Uint8Array)) { err(lineNo, 'type mismatch in array'); return 'stop'; }
+    }
     vars[arrName].push(v);
     pc++; return 'ok';
   }
@@ -276,7 +293,14 @@ function exec(ins) {
     const idxVal = getVal(parts[2]); const placeVal = getVal(parts[3]); const xVal = getVal(parts[4]);
     if (!idxVal || idxVal instanceof Uint8Array || Array.isArray(idxVal)) { err(lineNo, 'invalid index'); return 'stop'; }
     if (!placeVal || placeVal instanceof Uint8Array || Array.isArray(placeVal)) { err(lineNo, 'invalid place'); return 'stop'; }
-    if (!xVal || xVal instanceof Uint8Array || Array.isArray(xVal)) { err(lineNo, 'invalid value'); return 'stop'; }
+    if (!xVal || Array.isArray(xVal)) { err(lineNo, 'invalid value'); return 'stop'; }
+    
+    if (vars[arrName].length > 0) {
+      const isTargetNum = !(vars[arrName][0] instanceof Uint8Array);
+      if (isTargetNum && xVal instanceof Uint8Array) { err(lineNo, 'type mismatch in array'); return 'stop'; }
+      if (!isTargetNum && !(xVal instanceof Uint8Array)) { err(lineNo, 'type mismatch in array'); return 'stop'; }
+    }
+    
     let nIdx = idxVal.toNumber(); nIdx = nIdx < 0 ? Math.ceil(nIdx) : Math.floor(nIdx);
     let nPlace = placeVal.toNumber(); nPlace = nPlace < 0 ? Math.ceil(nPlace) : Math.floor(nPlace);
     const arr = vars[arrName];
@@ -434,7 +458,7 @@ function exec(ins) {
     vars[parts[1]] = new BigHex(rn.toString(16)); pc++; return 'ok';
   }
 
-  if (['lg', 'ln', 'log2', 'sin', 'cos', 'tan', 'cot', 'arcsin', 'arccos', 'arctan', 'arccot', 'sinh', 'cosh', 'tanh', 'coth', 'arsinh', 'arcosh', 'artanh', 'arcoth', 'exp', 'ten', 'sqrt', 'square', 'cube', 'cbrt', 'fact'].includes(op)) {
+  if (['lg', 'ln', 'log2', 'sin', 'cos', 'tan', 'cot', 'sec', 'csc', 'arcsin', 'arccos', 'arctan', 'arccot', 'arcsec', 'arccsc', 'versin', 'coversin', 'exsec', 'excsc', 'haversin', 'sinh', 'cosh', 'tanh', 'coth', 'sech', 'csch', 'arsinh', 'arcosh', 'artanh', 'arcoth', 'arsech', 'arcsch', 'exp', 'ten', 'sqrt', 'square', 'cube', 'cbrt', 'fact'].includes(op)) {
     const a = getVal(parts[1]);
     if (!a || a instanceof Uint8Array || Array.isArray(a)) { err(lineNo, 'invalid operand'); return 'stop'; }
     try {
@@ -477,6 +501,8 @@ function exec(ins) {
     const aName = parts[1], arrName = parts[2];
     if (!(arrName in vars) || !Array.isArray(vars[arrName])) { err(lineNo, 'invalid array variable'); return 'stop'; }
     const arr = vars[arrName];
+    if (arr.length > 0 && arr[0] instanceof Uint8Array) { err(lineNo, op + ' requires numeric array'); return 'stop'; }
+    
     let res = new BigHex(op === 'sum' ? 0 : 1);
     for (let i = 0; i < arr.length; i++) {
       if (op === 'sum') res = res.add(arr[i]);
