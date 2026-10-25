@@ -234,7 +234,6 @@ function exec(ins) {
     } else if (parts.length === 2) {
       vars[varName] = [];
     } else if (parts.length === 3 && (parts[2].startsWith('"') || parts[2] in vars)) {
-      // 可能是 defstrarr s str&divide{...} 或者直接赋值变量
       const v = getVal(parts[2]);
       if (!Array.isArray(v)) { err(lineNo, 'invalid array expression'); return 'stop'; }
       vars[varName] = v;
@@ -259,7 +258,6 @@ function exec(ins) {
     const v = getVal(parts[2]);
     if (!v || Array.isArray(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
     
-    // 简单的类型一致性检查
     if (vars[arrName].length > 0) {
       const isTargetNum = !(vars[arrName][0] instanceof Uint8Array);
       if (isTargetNum && v instanceof Uint8Array) { err(lineNo, 'type mismatch in array'); return 'stop'; }
