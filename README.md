@@ -173,6 +173,13 @@ print "Done"
 - `lg/ln/log2 a`, `log a b`, `sin/cos/tan/arcsin/arccos/arctan a`
 - `sinh/cosh/tanh/arsinh/arcosh/artanh a`, `exp/ten a`
 - `usingrad` / `usingdeg`
+- `percent a`: \(a / 100\)
+- `sn a b c`: Scientific notation, \(a = b \times 10^c\).
+- `sqrt/square/cube/cbrt a`: Square root, square, cube, cube root.
+- `root a b`: Root of \(a\) with degree \(b\) (real part only).
+- `fact a`: Factorial (errors if not non-negative integer).
+- `pol a b c`: Polar radius, \(a = \sqrt{b^2 + c^2}\).
+- `usinggrad`: Switch trig mode to gradians.
 
 ## Control Flow
 - `if-eq A B ... endif` OR `if-eq A B ... endif-else ... endelse`
