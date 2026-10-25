@@ -140,33 +140,36 @@ print "Done"
 ## Variables & Memory
 - `def a $10`: Define a number.
 - `defstr s "text\x41"`: Define a string. Supports `\\`, `\"`, `\xNN`.
-- `defarr arr x y z`: Define a numeric array.
-- `del a`: Delete a variable. If `a` is an array, `del arr index` deletes a specific element.
+- `defarr arr x y z`: Define a numeric array (can be empty).
+- `del a`: Delete a variable.
 - `swap a b`: Swap the values of `a` and `b` (errors if types differ).
 - `area ... endarea`: Dynamic scope block.
 
 ## Arrays
 - `append arr x`: Append `x` to the array.
+- `deli arr index`: Delete element at `index`.
 - `allclear arr`: Empty the array.
 - `exchange arr index place x`: Insert/replace.
-- `sum a array` / `prod a array`: Sum or multiply all elements.
+- `sum a array` / `prod a array`: Sum or multiply all elements. Auto-creates `a` if missing.
 - `arr&index{x}`: Read element at `x`.
 - `arr&len`: Get array length.
 - `arr&include{x}`: Returns `1` if `x` is in array, else `0`.
-- `arr&findfirst{x}`: Returns index of first occurrence of `x`, or `-1`.
+- `arr&findfirst{x}`: Returns index of first occurrence, or `-1`.
+- `arr&join{str}`: Join all hex strings using separator `str`.
 
 ## Strings (Byte Arrays)
-- `concat a b`: Concatenate strings `a` and `b` (both must be strings).
+- `concat a b`: Concatenate strings `a` and `b`.
 - `s&index{N}`: Extract Nth byte.
 - `s&len`: Length of string in bytes.
 - `s&find{d}`: Search for substring or byte.
 
 ## Arithmetic & Math
-- `add/sub/mul/div/fdiv a b`
-- `mod/fmod a b`
-- `pow/ipow a b`
+- `add/sub/mul/div/fdiv a b`: `div` floors, `fdiv` standard division.
+- `mod/fmod a b`: `mod` requires integer `b`.
+- `pow/ipow a b`: Real/Imaginary parts of \(a^b\).
 - `concatnum a b`: Textual concatenation of numbers.
-- `abs/floor/ceil/round/dot a`
+- `digitsave a num`: Keep `num` significant figures from the first non-zero digit (truncates and pads integers).
+- `abs/floor/ceil/round/dot a`: `dot` clears the integer part.
 - `lg/ln/log2 a`, `log a b`, `sin/cos/tan/arcsin/arccos/arctan a`
 - `sinh/cosh/tanh/arsinh/arcosh/artanh a`, `exp/ten a`
 - `usingrad` / `usingdeg`
@@ -185,4 +188,4 @@ print "Done"
 ## Input
 - `input a`: Reads one character.
 - `inputstr a` / `inputnum a` / `inputdecnum a`: Standard inputs.
-- `hinputstr a hint` / `hinputnum a hint` / `hinputdecnum a hint`: Custom prompt inputs.
+- `hinputstr a hint` / `hinputnum a hint` / `hinputdecnum a hint`: Custom prompt inputs
