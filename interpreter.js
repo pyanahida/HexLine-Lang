@@ -292,22 +292,23 @@ function exec(ins) {
   }
 
   if (op === 'del') {
-    if (parts.length === 3) {
-      const arrName = parts[1];
-      if (!(arrName in vars) || !Array.isArray(vars[arrName])) { err(lineNo, 'invalid array variable'); return 'stop'; }
-      const idxVal = getVal(parts[2]);
-      if (!idxVal || idxVal instanceof Uint8Array || Array.isArray(idxVal)) { err(lineNo, 'invalid index'); return 'stop'; }
-      
-      let nIdx = idxVal.toNumber();
-      nIdx = nIdx < 0 ? Math.ceil(nIdx) : Math.floor(nIdx);
-      const arr = vars[arrName];
-      let targetIdx = nIdx >= 0 ? nIdx : arr.length + nIdx;
-      
-      if (targetIdx < 0 || targetIdx >= arr.length) { err(lineNo, 'index out of bounds'); return 'stop'; }
-      arr.splice(targetIdx, 1);
-    } else {
-      delete vars[parts[1]];
-    }
+    delete vars[parts[1]];
+    pc++; return 'ok';
+  }
+
+  if (op === 'deli') {
+    const arrName = parts[1];
+    if (!(arrName in vars) || !Array.isArray(vars[arrName])) { err(lineNo, 'invalid array variable'); return 'stop'; }
+    const idxVal = getVal(parts[2]);
+    if (!idxVal || idxVal instanceof Uint8Array || Array.isArray(idxVal)) { err(lineNo, 'invalid index'); return 'stop'; }
+    
+    let nIdx = idxVal.toNumber();
+    nIdx = nIdx < 0 ? Math.ceil(nIdx) : Math.floor(nIdx);
+    const arr = vars[arrName];
+    let targetIdx = nIdx >= 0 ? nIdx : arr.length + nIdx;
+    
+    if (targetIdx < 0 || targetIdx >= arr.length) { err(lineNo, 'index out of bounds'); return 'stop'; }
+    arr.splice(targetIdx, 1);
     pc++; return 'ok';
   }
 
@@ -317,6 +318,55 @@ function exec(ins) {
     vars[parts[1]] = v.dot(); pc++; return 'ok';
   }
   
+  if (op === 'digitsave') {
+    const aName = parts[1];
+    const v = getVal(aName);
+    if (!v || v instanceof Uint8Array || Array.isArray(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
+    
+    const nVal = getVal(parts[2]);
+    if (!nVal || nVal instanceof Uint8Array || Array.isArray(nVal)) { err(lineNo, 'invalid operand'); return 'stop'; }
+    if (!nVal.isInteger() || nVal.sign < 0) { err(lineNo, 'digits must be a non-negative integer'); return 'stop'; }
+    
+    let numDigits = nVal.toNumber();
+    let str = v.abs().toString(); 
+    let partsStr = str.split('.');
+    let ip = partsStr[0], fp = partsStr[1] || '';
+    
+    let firstNonZero = -1;
+    for (let i = 0; i < ip.length; i++) {
+      if (ip[i] !== '0') { firstNonZero = i; break; }
+    }
+    
+    if (firstNonZero !== -1) {
+      let keepIp = Math.max(0, ip.length - firstNonZero);
+      if (numDigits <= keepIp) {
+        let newIp = ip.slice(0, firstNonZero + numDigits);
+        newIp += '0'.repeat(ip.length - newIp.length);
+        vars[aName] = new BigHex(newIp);
+        vars[aName].sign = v.sign;
+      } else {
+        let rem = numDigits - keepIp;
+        let newIp = ip;
+        let newFp = fp.slice(0, rem);
+        vars[aName] = new BigHex(newIp + (newFp ? '.' + newFp : ''));
+        vars[aName].sign = v.sign;
+      }
+    } else {
+      let firstNonZeroFp = -1;
+      for (let i = 0; i < fp.length; i++) {
+        if (fp[i] !== '0') { firstNonZeroFp = i; break; }
+      }
+      if (firstNonZeroFp !== -1) {
+        let newFp = fp.slice(0, firstNonZeroFp + numDigits);
+        vars[aName] = new BigHex('0.' + newFp);
+        vars[aName].sign = v.sign;
+      } else {
+        vars[aName] = new BigHex(0);
+      }
+    }
+    pc++; return 'ok';
+  }
+
   if (op === 'swap') {
     const a = parts[1], b = parts[2];
     if (!(a in vars) || !(b in vars)) { err(lineNo, 'undefined variable'); return 'stop'; }
