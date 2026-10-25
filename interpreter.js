@@ -207,7 +207,7 @@ function exec(ins) {
   }
 
   if (op === 'def' || op === 'defstr') {
-    if (['TRUE', 'FALSE', 'PI', 'E', 'RANDOM', 'TIME'].includes(parts[1])) { err(lineNo, 'reserved literal cannot be a variable'); return 'stop'; }
+    if (['TRUE', 'FALSE', 'PI', 'E', 'RANDOM', 'TIME', 'SQRT2', 'SQRT3', 'SQRT5', 'PHI', 'LG2'].includes(parts[1])) { err(lineNo, 'reserved literal cannot be a variable'); return 'stop'; }
     if (op === 'def') {
       const v = getVal(parts[2]);
       if (!v || v instanceof Uint8Array || Array.isArray(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
@@ -249,6 +249,17 @@ function exec(ins) {
     const v = getVal(parts[2]);
     if (!v || v instanceof Uint8Array || Array.isArray(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
     vars[arrName].push(v);
+    pc++; return 'ok';
+  }
+
+  if (op === 'shuffle') {
+    const arrName = parts[1];
+    if (!(arrName in vars) || !Array.isArray(vars[arrName])) { err(lineNo, 'invalid array variable'); return 'stop'; }
+    const arr = vars[arrName];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
     pc++; return 'ok';
   }
 
@@ -411,7 +422,6 @@ function exec(ins) {
     const a = getVal(parts[1]), b = getVal(parts[2]);
     if (!a || !b || a instanceof Uint8Array || Array.isArray(a) || b instanceof Uint8Array || Array.isArray(b)) { err(lineNo, 'invalid operand'); return 'stop'; }
     let an = a.toNumber(), bn = b.toNumber();
-    // 只保留实部
     let rn = an < 0 ? (Math.round(bn) % 2 === 0 ? 0 : -Math.pow(-an, 1/bn)) : Math.pow(an, 1/bn);
     vars[parts[1]] = new BigHex(rn.toString(16)); pc++; return 'ok';
   }
@@ -424,7 +434,7 @@ function exec(ins) {
     vars[parts[1]] = new BigHex(rn.toString(16)); pc++; return 'ok';
   }
 
-  if (['lg', 'ln', 'log2', 'sin', 'cos', 'tan', 'arcsin', 'arccos', 'arctan', 'sinh', 'cosh', 'tanh', 'arsinh', 'arcosh', 'artanh', 'exp', 'ten', 'sqrt', 'square', 'cube', 'cbrt', 'fact'].includes(op)) {
+  if (['lg', 'ln', 'log2', 'sin', 'cos', 'tan', 'cot', 'arcsin', 'arccos', 'arctan', 'arccot', 'sinh', 'cosh', 'tanh', 'coth', 'arsinh', 'arcosh', 'artanh', 'arcoth', 'exp', 'ten', 'sqrt', 'square', 'cube', 'cbrt', 'fact'].includes(op)) {
     const a = getVal(parts[1]);
     if (!a || a instanceof Uint8Array || Array.isArray(a)) { err(lineNo, 'invalid operand'); return 'stop'; }
     try {
