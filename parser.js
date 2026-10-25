@@ -136,6 +136,36 @@ function getVal(tok) {
     }
   }
 
+  if (tok.includes('&divide{')) {
+    const match = tok.match(/^([a-zA-Z0-9_]+)&divide\{(.*)\}$/);
+    if (match) {
+      const varName = match[1];
+      let divTok = match[2];
+      if (!(vars[varName] instanceof Uint8Array)) return null;
+      
+      let divStr = "";
+      if (divTok.startsWith('"') && divTok.endsWith('"')) {
+        divStr = new TextDecoder(currentEncoding).decode(parseStrLiteral(divTok));
+      } else if (divTok in vars && vars[divTok] instanceof Uint8Array) {
+        divStr = new TextDecoder(currentEncoding).decode(vars[divTok]);
+      } else {
+        divStr = divTok;
+      }
+      
+      let srcStr = new TextDecoder(currentEncoding).decode(vars[varName]);
+      let parts = [];
+      if (divStr === "") {
+        parts = srcStr.trim().split(/\s+/);
+        if (parts.length === 1 && parts[0] === "") parts = [];
+      } else {
+        parts = srcStr.split(divStr);
+      }
+      
+      return parts.map(p => encodeText(p, currentEncoding));
+    }
+    return null;
+  }
+
   if (tok.includes('&index{')) {
     const match = tok.match(/^([a-zA-Z0-9_]+)&index\{(.+)\}$/);
     if (match) {
@@ -268,16 +298,19 @@ function getVal(tok) {
     if (match) {
       const arrName = match[1];
       let sepTok = match[2];
-      let sepBytes = null;
+      let sepStr = "";
       if (sepTok.startsWith('"') && sepTok.endsWith('"')) {
-        sepBytes = parseStrLiteral(sepTok);
+        sepStr = new TextDecoder(currentEncoding).decode(parseStrLiteral(sepTok));
       } else if (sepTok in vars && vars[sepTok] instanceof Uint8Array) {
-        sepBytes = vars[sepTok];
+        sepStr = new TextDecoder(currentEncoding).decode(vars[sepTok]);
       }
       
-      if (sepBytes && Array.isArray(vars[arrName])) {
-        let strs = vars[arrName].map(item => item.toString());
-        let joined = strs.join(new TextDecoder(currentEncoding).decode(sepBytes));
+      if (Array.isArray(vars[arrName])) {
+        let strs = vars[arrName].map(item => {
+          if (item instanceof Uint8Array) return new TextDecoder(currentEncoding).decode(item);
+          return item.toString();
+        });
+        let joined = strs.join(sepStr);
         return encodeText(joined, currentEncoding);
       }
       return null;
@@ -299,23 +332,20 @@ function buildMatches(prog) {
     else if (t === 'endif' || t === 'endif-else') {
       const top = stack.pop();
       if (!top || top.type !== 'if') return { err: { line: prog[i].lineNo, msg: 'mismatched ' + t } };
-      map[top.i] = i;
-      map[i] = top.i;
+      map[top.i] = i; map[i] = top.i;
       if (t === 'endif-else') stack.push({ type: 'else', i });
     }
     else if (t === 'endelse') {
       const top = stack.pop();
       if (!top || top.type !== 'else') return { err: { line: prog[i].lineNo, msg: 'mismatched ' + t } };
-      map[top.i] = i;
-      map[i] = top.i;
+      map[top.i] = i; map[i] = top.i;
     }
     else if (t === 'endwhile' || t === 'endloop' || t === 'endarea') {
       const top = stack.pop();
       if (!top) return { err: { line: prog[i].lineNo, msg: 'unmatched ' + t } };
       const want = t === 'endwhile' ? 'while' : (t === 'endloop' ? 'loop' : 'area');
       if (top.type !== want) return { err: { line: prog[i].lineNo, msg: 'mismatched ' + t } };
-      map[top.i] = i;
-      map[i] = top.i; 
+      map[top.i] = i; map[i] = top.i; 
     }
   }
   if (stack.length) return { err: { line: prog[stack[stack.length - 1].i].lineNo, msg: 'unclosed block' } };
