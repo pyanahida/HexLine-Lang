@@ -157,6 +157,8 @@ print "Done"
 - `arr&findfirst{x}`: Returns index of first occurrence, or `-1`.
 - `arr&join{str}`: Join all hex strings using separator `str`.
 - `defarr arr RANGE{start}{end}{step}`: Generates an array following Python's `range` rules.
+- `arr&randitem`: Return a random element.
+- `shuffle arr`: Randomly shuffle the array in place.
 
 ## Strings (Byte Arrays)
 - `concat a b`: Concatenate strings `a` and `b`.
@@ -181,6 +183,8 @@ print "Done"
 - `fact a`: Factorial (errors if not non-negative integer).
 - `pol a b c`: Polar radius, \(a = \sqrt{b^2 + c^2}\).
 - `usinggrad`: Switch trig mode to gradians.
+- `cot/coth/arccot/arcoth a`: Cotangent functions.
+- Built-in constants: `SQRT2`, `SQRT3`, `SQRT5`, `PHI`, `LG2` (64 hex digits).
 
 ## Control Flow
 - `if-eq A B ... endif` OR `if-eq A B ... endif-else ... endelse`
