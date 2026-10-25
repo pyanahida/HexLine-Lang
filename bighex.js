@@ -128,6 +128,7 @@ class BigHex {
   }
 
   add(o) {
+    if (!(o instanceof BigHex)) throw new Error('add requires BigHex');
     if (this.sign === o.sign) {
       let r = BigHex.addAbs(this, o); r.sign = this.sign; return r;
     } else {
@@ -141,9 +142,13 @@ class BigHex {
     }
   }
 
-  sub(o) { return this.add(o.neg()); }
+  sub(o) {
+    if (!(o instanceof BigHex)) throw new Error('sub requires BigHex');
+    return this.add(o.neg());
+  }
 
   mul(o) {
+    if (!(o instanceof BigHex)) throw new Error('mul requires BigHex');
     if (this.isZero() || o.isZero()) return new BigHex(0);
     let A = [...this.int, ...this.frac], B = [...o.int, ...o.frac];
     let fShift = this.frac.length + o.frac.length;
@@ -161,6 +166,7 @@ class BigHex {
   }
 
   div(o) {
+    if (!(o instanceof BigHex)) throw new Error('div requires BigHex');
     if (o.isZero()) throw new Error('division by zero');
     if (this.isZero()) return new BigHex(0);
     let q = new BigHex(), r = new BigHex();
@@ -178,8 +184,7 @@ class BigHex {
       if (!isFirst || d > 0) { q.int.push(d); isFirst = false; }
     }
     if (q.int.length === 0) q.int = [0];
-    // 截断改为 64 位
-    for (let iter = 0; iter < 64; iter++) {
+    for (let iter = 0; iter < 32; iter++) {
       r = r.mul(new BigHex(16));
       let d = 0;
       let B_abs = new BigHex(); B_abs.int = B; 
@@ -226,17 +231,20 @@ class BigHex {
   }
   
   mod(o) {
+    if (!(o instanceof BigHex)) throw new Error('mod requires BigHex');
     if (o.isZero()) throw new Error('division by zero');
     return this.sub(this.div(o).floor().mul(o));
   }
   
   fmod(o) {
+    if (!(o instanceof BigHex)) throw new Error('fmod requires BigHex');
     if (o.isZero()) throw new Error('division by zero');
     let q = this.div(o); q.frac = []; 
     return this.sub(q.mul(o));
   }
 
   pow(o) {
+    if (!(o instanceof BigHex)) throw new Error('pow requires BigHex');
     let oNum = o.toNumber();
     if (oNum === 0) {
       if (this.isZero()) throw new Error('0^0 undefined');
@@ -259,6 +267,7 @@ class BigHex {
   }
   
   ipow(o) {
+    if (!(o instanceof BigHex)) throw new Error('ipow requires BigHex');
     let oNum = o.toNumber();
     if (this.sign < 0 && !o.isInteger()) {
       let mag = Math.exp(oNum * Math.log(Math.abs(this.toNumber())));
