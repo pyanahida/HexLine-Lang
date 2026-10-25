@@ -35,16 +35,16 @@
             // Irregular
             {
                 match: /(?<=\n\s*)/ + keywordsToRegex(
-                    "def defstr del swap area endarea" +
-                    "add sub mul div fdiv mod fmod pow ipow concatnum" +
+                    "def defstr del deli swap area endarea" +
+                    "add sub mul div fdiv mod fmod pow ipow concatnum fact pol" +
                     "abs floor ceil round dot" +
                     "and or not xor nand nor xnor" +
-                    "lg ln log2 log exp ten" +
-                    "label goto usingrad usingdeg" +
+                    "lg ln log2 log exp ten percent sn sqrt cbrt square cube root" +
+                    "label goto" +
                     "loop endloop endif endwhile endif-else endelse" +
                     "defarr append allclear exchange sum prod" +
                     "concat break continue" +
-                    "deli digitsave"
+                    "digitsave shuffle"
                 ) + /\b/
                 0: "keyword"
             }
@@ -66,6 +66,22 @@
             // Code stop
             {
                 match: /(?<=\n\s*)sleep-(s|ms|us|min|hour|day|week)\b/
+                0: "keyword"
+            }
+            // Using math degree unit
+            {
+                match: /(?<=\n\s*)using(rad|deg|grad)\b/
+                0: "keyword"
+            }
+            // Trigonometric function
+            {
+                match: /(?<=\n\s*)/ + keywordsToRegex(
+                    "sin sinh arcsin arsinh" +
+                    "cos cosh arccos arcosh" +
+                    "tan tanh arctan artanh" +
+                    "cot coth arccot arcoth"
+                )
+                0: "keyword"
             }
         ]
         // Match string
@@ -95,14 +111,17 @@
         // Keywords of constants
         "const": {
             match: keywordsToRegex(
-                "TRUE FALSE PI E RANDOM TIME RANDINT"
+                "TRUE FALSE PI E PHI" +
+                "RANDOM TIME RANDINT RANGE" +
+                "SQRT2 SQRT3 SQRT5" +
+                "LG2"
             )
             0: "type"
         }
         // The label of goto
         "label": {
             match: /#[a-zA-Z_][0-9a-zA-Z_]*\b/
-            0: "variable"
+            0: "label"
         }
     ]
     contains: [
