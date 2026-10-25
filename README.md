@@ -156,6 +156,7 @@ print "Done"
 - `arr&include{x}`: Returns `1` if `x` is in array, else `0`.
 - `arr&findfirst{x}`: Returns index of first occurrence, or `-1`.
 - `arr&join{str}`: Join all hex strings using separator `str`.
+- `defarr arr RANGE{start}{end}{step}`: Generates an array following Python's `range` rules.
 
 ## Strings (Byte Arrays)
 - `concat a b`: Concatenate strings `a` and `b`.
