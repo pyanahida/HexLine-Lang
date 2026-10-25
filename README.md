@@ -159,12 +159,14 @@ print "Done"
 - `defarr arr RANGE{start}{end}{step}`: Generates an array following Python's `range` rules.
 - `arr&randitem`: Return a random element.
 - `shuffle arr`: Randomly shuffle the array in place.
+- `defstrarr arr ...`: Defines an array of strings.
 
 ## Strings (Byte Arrays)
 - `concat a b`: Concatenate strings `a` and `b`.
 - `s&index{N}`: Extract Nth byte.
 - `s&len`: Length of string in bytes.
 - `s&find{d}`: Search for substring or byte.
+- `s&divide{sep}`: Split string into a string array. If `sep` is empty, splits by whitespace.
 
 ## Arithmetic & Math
 - `add/sub/mul/div/fdiv a b`: `div` floors, `fdiv` standard division.
@@ -185,6 +187,8 @@ print "Done"
 - `usinggrad`: Switch trig mode to gradians.
 - `cot/coth/arccot/arcoth a`: Cotangent functions.
 - Built-in constants: `SQRT2`, `SQRT3`, `SQRT5`, `PHI`, `LG2` (64 hex digits).
+- `sec/csc/arcsec/arccsc/sech/csch/arsech/arcsch a`: Secant and cosecant functions.
+- `versin/coversin/exsec/excsc/haversin a`: Historical trigonometric functions.
 
 ## Control Flow
 - `if-eq A B ... endif` OR `if-eq A B ... endif-else ... endelse`
