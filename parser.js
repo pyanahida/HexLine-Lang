@@ -86,6 +86,29 @@ function splitArgs(str) {
 function getVal(tok) {
   if (isLiteral(tok)) return parseLiteral(tok);
   
+  if (tok.startsWith('RANGE{')) {
+    const match = tok.match(/^RANGE\{(.+)\}\{(.+)\}(?:\{(.+)\})?$/);
+    if (match) {
+      let vals = [match[1], match[2], match[3] || '$1'].map(t => {
+        if (t.startsWith('$')) return new BigHex(t.slice(1));
+        if (t in vars && vars[t] instanceof BigHex) return vars[t];
+        return null;
+      });
+      if (vals[0] && vals[1] && vals[2]) {
+        let start = vals[0].toNumber(), end = vals[1].toNumber(), step = vals[2].toNumber();
+        if (step === 0) throw new Error('RANGE step cannot be zero');
+        let arr = [];
+        if (step > 0) {
+          for (let i = start; i < end; i += step) arr.push(new BigHex(i));
+        } else {
+          for (let i = start; i > end; i += step) arr.push(new BigHex(i));
+        }
+        return arr;
+      }
+    }
+    return null;
+  }
+  
   if (tok.startsWith('RANDINT{')) {
     const match = tok.match(/^RANDINT\{(.+)\}\{(.+)\}$/);
     if (match) {
@@ -120,20 +143,21 @@ function getVal(tok) {
       if (indexTok.startsWith('$')) idxVal = new BigHex(indexTok.slice(1));
       else if (indexTok in vars) { if (vars[indexTok] instanceof BigHex) idxVal = vars[indexTok]; }
       
-      if (idxVal && vars[varName] instanceof Uint8Array) {
+      if (idxVal) {
         let idxNum = idxVal.toNumber();
         let index = idxNum < 0 ? Math.ceil(idxNum) : Math.floor(idxNum);
-        const arr = vars[varName];
-        let targetIdx = index >= 0 ? index : arr.length + index;
-        return (targetIdx >= 0 && targetIdx < arr.length) ? new BigHex(arr[targetIdx]) : new BigHex(-1);
-      }
-      else if (idxVal && Array.isArray(vars[varName])) {
-        let idxNum = idxVal.toNumber();
-        let index = idxNum < 0 ? Math.ceil(idxNum) : Math.floor(idxNum);
-        const arr = vars[varName];
-        let targetIdx = index >= 0 ? index : arr.length + index;
-        if (targetIdx < 0 || targetIdx >= arr.length) throw new Error('index out of bounds');
-        return arr[targetIdx];
+        
+        if (vars[varName] instanceof Uint8Array) {
+          const arr = vars[varName];
+          let targetIdx = index >= 0 ? index : arr.length + index;
+          return (targetIdx >= 0 && targetIdx < arr.length) ? new BigHex(arr[targetIdx]) : new BigHex(-1);
+        }
+        else if (Array.isArray(vars[varName])) {
+          const arr = vars[varName];
+          let targetIdx = index >= 0 ? index : arr.length + index;
+          if (targetIdx < 0 || targetIdx >= arr.length) throw new Error('index out of bounds');
+          return arr[targetIdx];
+        }
       }
     }
     return null;
