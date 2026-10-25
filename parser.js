@@ -2,9 +2,6 @@ let currentEncoding = 'utf-8';
 let currentProg = [];
 let currentMatch = {};
 
-const PI_HEX = "3.243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C8";
-const E_HEX = "2.B7E151628AED2A6ABF7158809CF4F3C762E7160F38B4DA56A784D9045190CFE";
-
 function parse(src) {
   const lines = src.split(/\r?\n/);
   if (!lines.length || !lines[0].startsWith('using '))
@@ -25,7 +22,7 @@ function parse(src) {
 }
 
 function isLiteral(t) { 
-  if (t === 'TRUE' || t === 'FALSE' || t === 'PI' || t === 'E' || t === 'RANDOM' || t === 'TIME') return true;
+  if (['TRUE', 'FALSE', 'PI', 'E', 'RANDOM', 'TIME', 'SQRT2', 'SQRT3', 'SQRT5', 'PHI', 'LG2'].includes(t)) return true;
   return t.startsWith('$'); 
 }
 
@@ -34,6 +31,11 @@ function parseLiteral(t) {
   if (t === 'FALSE') return new BigHex(0);
   if (t === 'PI') return new BigHex(PI_HEX);
   if (t === 'E') return new BigHex(E_HEX);
+  if (t === 'SQRT2') return new BigHex(SQRT2_HEX);
+  if (t === 'SQRT3') return new BigHex(SQRT3_HEX);
+  if (t === 'SQRT5') return new BigHex(SQRT5_HEX);
+  if (t === 'PHI') return new BigHex(PHI_HEX);
+  if (t === 'LG2') return new BigHex(LG2_HEX);
   if (t === 'TIME') return new BigHex(Math.floor(Date.now() / 1000));
   if (t === 'RANDOM') {
     let str = "0.";
@@ -159,6 +161,17 @@ function getVal(tok) {
           return arr[targetIdx];
         }
       }
+    }
+    return null;
+  }
+  
+  if (tok.endsWith('&randitem')) {
+    const varName = tok.slice(0, -9);
+    if (varName in vars && Array.isArray(vars[varName])) {
+      const arr = vars[varName];
+      if (arr.length === 0) throw new Error('randitem on empty array');
+      const randIdx = Math.floor(Math.random() * arr.length);
+      return arr[randIdx];
     }
     return null;
   }
