@@ -42,7 +42,7 @@
                     "lg ln log2 log exp ten percent sn sqrt cbrt square cube root" +
                     "label goto" +
                     "loop endloop endif endwhile endif-else endelse" +
-                    "defarr append allclear exchange sum prod" +
+                    "defarr defstrarr append allclear exchange sum prod" +
                     "concat break continue" +
                     "digitsave shuffle"
                 ) + /\b/
@@ -75,12 +75,14 @@
             }
             // Trigonometric function
             {
-                match: /(?<=\n\s*)/ + keywordsToRegex(
+                match: /(?<=\n\s*)(/ + keywordsToRegex(
                     "sin sinh arcsin arsinh" +
                     "cos cosh arccos arcosh" +
                     "tan tanh arctan artanh" +
-                    "cot coth arccot arcoth"
-                )
+                    "cot coth arccot arcoth" +
+                    "csc csch arccsc arcsch" +
+                    "sec sech arcsec arsech"
+                ) + /|(co|ha)?versin|ex(sec|csc))\b/
                 0: "keyword"
             }
         ]
