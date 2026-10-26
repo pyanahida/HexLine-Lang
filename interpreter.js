@@ -14,6 +14,14 @@ function exec(ins) {
     if (!cmp(op.slice(3), a, b)) { pc = currentMatch[pc] + 1; return 'jumped'; }
     pc++; return 'ok';
   }
+  if (op === 'if-isTrue' || op === 'if-isFalse') {
+    const a = getVal(parts[1]);
+    if (!a || a instanceof Uint8Array || Array.isArray(a)) { err(lineNo, 'invalid operand'); return 'stop'; }
+    const isZero = a.isZero();
+    const condition = op === 'if-isTrue' ? !isZero : isZero;
+    if (!condition) { pc = currentMatch[pc] + 1; return 'jumped'; }
+    pc++; return 'ok';
+  }
   if (op === 'endif') { pc++; return 'ok'; }
   if (op === 'endif-else') { pc = currentMatch[pc] + 1; return 'jumped'; }
   if (op === 'endelse') { pc++; return 'ok'; }
@@ -22,6 +30,14 @@ function exec(ins) {
     const a = getVal(parts[1]), b = getVal(parts[2]);
     if (!a || !b || a instanceof Uint8Array || b instanceof Uint8Array || Array.isArray(a) || Array.isArray(b)) { err(lineNo, 'invalid operand'); return 'stop'; }
     if (!cmp(op.slice(6), a, b)) { pc = currentMatch[pc] + 1; return 'jumped'; }
+    pc++; return 'ok';
+  }
+  if (op === 'while-isTrue' || op === 'while-isFalse') {
+    const a = getVal(parts[1]);
+    if (!a || a instanceof Uint8Array || Array.isArray(a)) { err(lineNo, 'invalid operand'); return 'stop'; }
+    const isZero = a.isZero();
+    const condition = op === 'while-isTrue' ? !isZero : isZero;
+    if (!condition) { pc = currentMatch[pc] + 1; return 'jumped'; }
     pc++; return 'ok';
   }
   if (op === 'endwhile') {
@@ -204,7 +220,7 @@ function exec(ins) {
   }
 
   if (op === 'def' || op === 'defstr') {
-    if (['TRUE', 'FALSE', 'PI', 'E', 'RANDOM', 'TIME', 'SQRT2', 'SQRT3', 'SQRT5', 'PHI', 'LG2'].includes(parts[1])) { err(lineNo, 'reserved literal cannot be a variable'); return 'stop'; }
+    if (['TRUE', 'FALSE', 'PI', 'E', 'RANDOM', 'TIME', 'SQRT2', 'SQRT3', 'SQRT5', 'PHI', 'LG2', 'LG3', 'LG7', 'GAMMA'].includes(parts[1])) { err(lineNo, 'reserved literal cannot be a variable'); return 'stop'; }
     if (op === 'def') {
       const v = getVal(parts[2]);
       if (!v || v instanceof Uint8Array || Array.isArray(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
