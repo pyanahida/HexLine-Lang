@@ -18,7 +18,6 @@ function parse(src) {
     line = line.trim();
     if (!line) continue;
     
-    // 行尾 + 宏替换
     if (line.endsWith('+')) {
       line = line.slice(0, -1).trim();
       if (line) prog.push({ lineNo: i + 1, text: line });
@@ -31,7 +30,7 @@ function parse(src) {
 }
 
 function isLiteral(t) { 
-  if (['TRUE', 'FALSE', 'PI', 'E', 'RANDOM', 'TIME', 'SQRT2', 'SQRT3', 'SQRT5', 'PHI', 'LG2'].includes(t)) return true;
+  if (['TRUE', 'FALSE', 'PI', 'E', 'RANDOM', 'TIME', 'SQRT2', 'SQRT3', 'SQRT5', 'PHI', 'LG2', 'LG3', 'LG7', 'GAMMA'].includes(t)) return true;
   return t.startsWith('$'); 
 }
 
@@ -45,6 +44,9 @@ function parseLiteral(t) {
   if (t === 'SQRT5') return new BigHex(SQRT5_HEX);
   if (t === 'PHI') return new BigHex(PHI_HEX);
   if (t === 'LG2') return new BigHex(LG2_HEX);
+  if (t === 'LG3') return new BigHex(LG3_HEX);
+  if (t === 'LG7') return new BigHex(LG7_HEX);
+  if (t === 'GAMMA') return new BigHex(GAMMA_HEX);
   if (t === 'TIME') return new BigHex(Math.floor(Date.now() / 1000));
   if (t === 'RANDOM') {
     let str = "0.";
@@ -102,7 +104,6 @@ function splitArgs(str) {
 function getVal(tok) {
   if (isLiteral(tok)) return parseLiteral(tok);
   
-  // 数字转字符串
   if (tok.endsWith('&toString')) {
     const varName = tok.slice(0, -9);
     if (varName in vars && vars[varName] instanceof BigHex) {
@@ -112,7 +113,6 @@ function getVal(tok) {
     return null;
   }
   
-  // 字符串大小写
   if (tok.endsWith('&toLowerCase') || tok.endsWith('&toUpperCase')) {
     const isLower = tok.endsWith('&toLowerCase');
     const varName = isLower ? tok.slice(0, -12) : tok.slice(0, -12);
@@ -126,6 +126,31 @@ function getVal(tok) {
         else newArr[i] = b;
       }
       return newArr;
+    }
+    return null;
+  }
+
+  if (tok.includes('&fullmatch{')) {
+    const match = tok.match(/^([a-zA-Z0-9_]+)&fullmatch\{(.*)\}$/);
+    if (match) {
+      const varName = match[1];
+      let regTok = match[2];
+      if (!(vars[varName] instanceof Uint8Array)) return null;
+      
+      let regStr = "";
+      if (regTok.startsWith('"') && regTok.endsWith('"')) {
+        regStr = new TextDecoder(currentEncoding).decode(parseStrLiteral(regTok));
+      } else if (regTok in vars && vars[regTok] instanceof Uint8Array) {
+        regStr = new TextDecoder(currentEncoding).decode(vars[regTok]);
+      }
+      
+      try {
+        let srcStr = new TextDecoder(currentEncoding).decode(vars[varName]);
+        let re = new RegExp("^(?:" + regStr + ")$");
+        return new BigHex(re.test(srcStr) ? 1 : 0);
+      } catch(e) {
+        throw new Error("invalid regex");
+      }
     }
     return null;
   }
@@ -367,8 +392,8 @@ function buildMatches(prog) {
   const map = {}, stack = [];
   for (let i = 0; i < prog.length; i++) {
     const t = splitArgs(prog[i].text)[0];
-    if (/^if-(eq|ne|gt|ge|lt|le)$/.test(t)) stack.push({ type: 'if', i });
-    else if (/^while-(eq|ne|gt|ge|lt|le)$/.test(t)) stack.push({ type: 'while', i });
+    if (/^if-(eq|ne|gt|ge|lt|le)$/.test(t) || t === 'if-isTrue' || t === 'if-isFalse') stack.push({ type: 'if', i });
+    else if (/^while-(eq|ne|gt|ge|lt|le)$/.test(t) || t === 'while-isTrue' || t === 'while-isFalse') stack.push({ type: 'while', i });
     else if (t === 'loop') stack.push({ type: 'loop', i });
     else if (t === 'area') stack.push({ type: 'area', i });
     else if (t === 'endif' || t === 'endif-else') {
