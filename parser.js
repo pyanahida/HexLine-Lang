@@ -3,20 +3,29 @@ let currentProg = [];
 let currentMatch = {};
 
 function parse(src) {
-  const lines = src.split(/\r?\n/);
-  if (!lines.length || !lines[0].startsWith('using '))
+  const rawLines = src.split(/\r?\n/);
+  if (!rawLines.length || !rawLines[0].startsWith('using '))
     return { err: 'first line must be "using <encoding>"' };
-  const encoding = lines[0].slice(6).trim().toLowerCase();
+  const encoding = rawLines[0].slice(6).trim().toLowerCase();
   const validEncodings = ['utf-8', 'iso-8859-1', 'utf-16le', 'utf-16be', 'utf-32le', 'utf-32be', 'gbk', 'windows-1252'];
   if (!validEncodings.includes(encoding)) return { err: `unsupported encoding: ${encoding}` };
+  
   const prog = [];
-  for (let i = 1; i < lines.length; i++) {
-    let line = lines[i];
+  for (let i = 1; i < rawLines.length; i++) {
+    let line = rawLines[i];
     const c = line.indexOf('//');
     if (c >= 0) line = line.slice(0, c);
     line = line.trim();
     if (!line) continue;
-    prog.push({ lineNo: i + 1, text: line });
+    
+    // 行尾 + 宏替换
+    if (line.endsWith('+')) {
+      line = line.slice(0, -1).trim();
+      if (line) prog.push({ lineNo: i + 1, text: line });
+      prog.push({ lineNo: i + 1, text: 'print "\\x0A"' });
+    } else {
+      prog.push({ lineNo: i + 1, text: line });
+    }
   }
   return { prog, encoding };
 }
@@ -53,6 +62,11 @@ function parseStrLiteral(tok) {
     if (inner[i] === '\\') {
       if (inner[i+1] === '\\') { bytes.push(92); i++; } 
       else if (inner[i+1] === '"') { bytes.push(34); i++; } 
+      else if (inner[i+1] === 'b') { bytes.push(8); i++; }
+      else if (inner[i+1] === 'a') { bytes.push(7); i++; }
+      else if (inner[i+1] === 'n') { bytes.push(10); i++; }
+      else if (inner[i+1] === 't') { bytes.push(9); i++; }
+      else if (inner[i+1] === 'r') { bytes.push(13); i++; }
       else if (inner[i+1] === 'x' && inner.length >= i + 4) {
         const hex = inner.slice(i+2, i+4);
         if (/^[0-9a-fA-F]{2}$/.test(hex)) { bytes.push(parseInt(hex, 16)); i += 3; } 
@@ -88,6 +102,34 @@ function splitArgs(str) {
 function getVal(tok) {
   if (isLiteral(tok)) return parseLiteral(tok);
   
+  // 数字转字符串
+  if (tok.endsWith('&toString')) {
+    const varName = tok.slice(0, -9);
+    if (varName in vars && vars[varName] instanceof BigHex) {
+      let str = vars[varName].toString();
+      return encodeText(str, currentEncoding);
+    }
+    return null;
+  }
+  
+  // 字符串大小写
+  if (tok.endsWith('&toLowerCase') || tok.endsWith('&toUpperCase')) {
+    const isLower = tok.endsWith('&toLowerCase');
+    const varName = isLower ? tok.slice(0, -12) : tok.slice(0, -12);
+    if (varName in vars && vars[varName] instanceof Uint8Array) {
+      const arr = vars[varName];
+      const newArr = new Uint8Array(arr.length);
+      for (let i = 0; i < arr.length; i++) {
+        let b = arr[i];
+        if (isLower && b >= 65 && b <= 90) newArr[i] = b + 32;
+        else if (!isLower && b >= 97 && b <= 122) newArr[i] = b - 32;
+        else newArr[i] = b;
+      }
+      return newArr;
+    }
+    return null;
+  }
+
   if (tok.startsWith('RANGE{')) {
     const match = tok.match(/^RANGE\{(.+)\}\{(.+)\}(?:\{(.+)\})?$/);
     if (match) {
