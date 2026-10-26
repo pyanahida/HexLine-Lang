@@ -136,6 +136,8 @@ print "Done"
 - `print ...`: Outputs bytes/strings using the `using` encoding. Non-printable ints output NUL.
 - `printnum ...`: Hexadecimal, uppercase, no `0x`.
 - `printdecnum ...`: Decimal, no separators.
+- `println ...` / `printnumln ...` / `printdecnumln ...`: Print with a trailing newline.
+- Line macros: If a line ends with `+`, it is automatically translated to a newline print statement.
 
 ## Variables & Memory
 - `def a $10`: Define a number.
@@ -167,6 +169,10 @@ print "Done"
 - `s&len`: Length of string in bytes.
 - `s&find{d}`: Search for substring or byte.
 - `s&divide{sep}`: Split string into a string array. If `sep` is empty, splits by whitespace.
+- `a&toString`: Convert number to string.
+- `s&toLowerCase`: Converts ASCII A-Z to lowercase.
+- `s&toUpperCase`: Converts ASCII a-z to uppercase.
+- String escapes: `\b`, `\a`, `\n`, `\t`, `\r`, `\\`, `\"`, `\xNN`.
 
 ## Arithmetic & Math
 - `add/sub/mul/div/fdiv a b`: `div` floors, `fdiv` standard division.
