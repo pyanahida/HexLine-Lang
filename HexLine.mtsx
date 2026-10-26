@@ -2,6 +2,8 @@
 // Author: pyanahida (AWGZYXDCZS)
 // This is a highlight-file about HexLine-Lang
 // Installing it within the MT manager allows you to enjoy code highlighting
+
+// About: Tutorial -> https://mt.cc/guide/file/mt-syntax.html
 {
     name: ["HexLine-Lang", ".hxl"]
     ignoreCase: true
@@ -150,22 +152,3 @@
             match: /#[a-zA-Z_][0-9a-zA-Z_]*\b/
             0: "label"
         }
-        // Signs
-        "sign": {
-            match: /[+](?=\n)/
-            0: "sign"
-        }
-    ]
-    contains: [
-        {include: "string"}
-        {include: "number"}
-        {include: "encode"}
-        {include: "keyword"}
-        {include: "method"}
-        {include: "brace"}
-        // {include: "inputnum"}
-        {include: "const"}
-        {include: "label"}
-        {include: "sign"}
-    ]
-}
