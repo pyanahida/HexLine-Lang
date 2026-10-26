@@ -51,7 +51,7 @@
             }
             // Judgements like ge, gt
             {
-                match: /(?<=\n\s*)(if|while)-(lt|le|gt|ge|eq|ne)\b/
+                match: /(?<=\n\s*)(if|while)-(lt|le|gt|ge|eq|ne|isTrue|isFalse)\b/
                 0: "keyword"
             }
             // I
@@ -103,26 +103,45 @@
             ]
         }
         // Curly braces usually indicate parameter passing
-        "inputnum": {
-            start: {match: /\{/, 0:"namespace"}
-            end: {match: /\}/, 0:"namespace"}
-            contains: [
-                // Writing numbers here is allowed
-                {include: "number"}
-            ]
-        }
-        // Methods of strings and arrays
+        // "inputnum": {
+        //     start: {match: /\{/, 0:"namespace"}
+        //     end: {match: /\}/, 0:"namespace"}
+        //     contains: [
+        //         // Writing numbers here is allowed
+        //         {include: "number"}
+        //     ]
+        // }
+        // Methods of strings, numbers and arrays
         "method": {
-            match: /(?<=[A-Za-z0-9_])&[a-zA-Z]+/
-            0: "operator"
+            match: /(?<=[A-Za-z0-9_])(&/ + keywordsToRegex(
+                // array
+                "include findfirst join randitem" +
+                // string
+                "find divide toLowerCase toUpperCase fullmatch" +
+                // number
+                "toString" +
+                // array & string
+                "index len"
+            ) + /)/
+            1: "operator"
+        }
+        // Curly braces
+        "brace": {
+            match: /(?<=[A-Za-z0-9_\}])(\{)(.*?)(\})/
+            1: "namespace"
+            2: {include: "number"}
+            2: {include: "string"}
+            2: {include: "const"}
+            3: "namespace"
         }
         // Keywords of constants
         "const": {
             match: keywordsToRegex(
-                "TRUE FALSE PI E PHI" +
+                "TRUE FALSE"
+                "PI E PHI GAMMA" +
                 "RANDOM TIME RANDINT RANGE" +
                 "SQRT2 SQRT3 SQRT5" +
-                "LG2"
+                "LG2 LG3 LG7"
             )
             0: "type"
         }
@@ -143,7 +162,8 @@
         {include: "encode"}
         {include: "keyword"}
         {include: "method"}
-        {include: "inputnum"}
+        {include: "brace"}
+        // {include: "inputnum"}
         {include: "const"}
         {include: "label"}
         {include: "sign"}
