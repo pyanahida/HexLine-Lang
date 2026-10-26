@@ -82,45 +82,42 @@ function exec(ins) {
   if (op === 'usingdeg') { useDegrees = true; useGradians = false; pc++; return 'ok'; }
   if (op === 'usinggrad') { useDegrees = false; useGradians = true; pc++; return 'ok'; }
 
-  if (op === 'print') {
+  if (['print', 'println', 'printnum', 'printnumln', 'printdecnum', 'printdecnumln'].includes(op)) {
+    let s = '';
     let bytes = [];
+    let isStrPrint = op === 'print' || op === 'println';
+    let isLn = op.endsWith('ln');
+    
     for (let i = 1; i < parts.length; i++) {
       const tok = parts[i];
-      if (tok.startsWith('"') && tok.endsWith('"')) {
-        const strVal = parseStrLiteral(tok);
-        if (strVal) bytes.push(...strVal);
-      } else if (tok in vars && vars[tok] instanceof Uint8Array) {
-        bytes.push(...vars[tok]);
+      const v = getVal(tok);
+      if (v === null) { err(lineNo, 'invalid operand'); return 'stop'; }
+      
+      if (isStrPrint) {
+        if (v instanceof Uint8Array) bytes.push(...v);
+        else if (Array.isArray(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
+        else {
+          if (v.isInteger() && v.sign > 0) {
+            let num = v.toNumber();
+            if (num >= 0 && num <= 255) bytes.push(num); else bytes.push(0);
+          } else bytes.push(0);
+        }
       } else {
-        const v = getVal(tok);
-        if (!v || v instanceof Uint8Array || Array.isArray(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
-        if (v.isInteger() && v.sign > 0) {
-          let num = v.toNumber();
-          if (num >= 0 && num <= 255) bytes.push(num); else bytes.push(0);
-        } else bytes.push(0);
+        if (v instanceof Uint8Array || Array.isArray(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
+        if (op.startsWith('printnum')) s += v.toString();
+        else s += v.toNumber().toString();
       }
     }
-    try { out(new TextDecoder(currentEncoding, { fatal: false }).decode(new Uint8Array(bytes))); } 
-    catch (e) { out(String.fromCharCode(...bytes)); }
+    
+    if (isStrPrint) {
+      if (isLn) bytes.push(10);
+      try { out(new TextDecoder(currentEncoding, { fatal: false }).decode(new Uint8Array(bytes))); } 
+      catch (e) { out(String.fromCharCode(...bytes)); }
+    } else {
+      if (isLn) s += '\n';
+      out(s);
+    }
     pc++; return 'ok';
-  }
-  if (op === 'printnum') {
-    let s = '';
-    for (let i = 1; i < parts.length; i++) {
-      const v = getVal(parts[i]);
-      if (!v || v instanceof Uint8Array || Array.isArray(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
-      s += v.toString();
-    }
-    out(s); pc++; return 'ok';
-  }
-  if (op === 'printdecnum') {
-    let s = '';
-    for (let i = 1; i < parts.length; i++) {
-      const v = getVal(parts[i]);
-      if (!v || v instanceof Uint8Array || Array.isArray(v)) { err(lineNo, 'invalid operand'); return 'stop'; }
-      s += v.toNumber().toString();
-    }
-    out(s); pc++; return 'ok';
   }
 
   if (['input', 'inputstr', 'inputnum', 'inputdecnum', 'hinputstr', 'hinputnum', 'hinputdecnum'].includes(op)) {
@@ -218,6 +215,10 @@ function exec(ins) {
         const strVal = parseStrLiteral(rawStr);
         if (strVal === null) { err(lineNo, 'invalid string literal'); return 'stop'; }
         vars[parts[1]] = strVal;
+      } else if (rawStr.endsWith('&toString')) {
+        const v = getVal(rawStr);
+        if (!(v instanceof Uint8Array)) { err(lineNo, 'invalid string assignment'); return 'stop'; }
+        vars[parts[1]] = v;
       } else { err(lineNo, 'invalid string literal'); return 'stop'; }
     }
     if (areaStack.length > 0) areaStack[areaStack.length - 1].push(parts[1]);
@@ -233,7 +234,7 @@ function exec(ins) {
       vars[varName] = arr;
     } else if (parts.length === 2) {
       vars[varName] = [];
-    } else if (parts.length === 3 && (parts[2].startsWith('"') || parts[2] in vars)) {
+    } else if (parts.length === 3) {
       const v = getVal(parts[2]);
       if (!Array.isArray(v)) { err(lineNo, 'invalid array expression'); return 'stop'; }
       vars[varName] = v;
