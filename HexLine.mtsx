@@ -8,6 +8,7 @@
     
     styles: [
         "encode" > "constant" @I
+        "sign"   > "keyword"  @B
     ]
     
     comment: {startsWith: "//"}
@@ -53,9 +54,14 @@
                 match: /(?<=\n\s*)(if|while)-(lt|le|gt|ge|eq|ne)\b/
                 0: "keyword"
             }
-            // IO
+            // I
             {
-                match: /(?<=\n\s*)(print|input)(num|decnum)?\b/
+                match: /(?<=\n\s*)print(num|decnum)?(ln)?\b/
+                0: "keyword"
+            }
+            // O
+            {
+                match: /(?<=\n\s*)input(num|decnum)?\b/
                 0: "keyword"
             }
             // Other inputs
@@ -92,7 +98,7 @@
             end: {match: /"/, 0: "string"}
             style: "string"
             contains: [
-                {match: /\\([\\"]|x[0-9A-Za-z]{2})/, 0: "strEscape"} 
+                {match: /\\([\\"bantr]|x[0-9A-Za-z]{2})/, 0: "strEscape"} 
                 {match: /\\./, 0: "error"} 
             ]
         }
@@ -125,6 +131,11 @@
             match: /#[a-zA-Z_][0-9a-zA-Z_]*\b/
             0: "label"
         }
+        // Signs
+        "sign": {
+            match: /[+](?=\n)/
+            0: "sign"
+        }
     ]
     contains: [
         {include: "string"}
@@ -135,5 +146,6 @@
         {include: "inputnum"}
         {include: "const"}
         {include: "label"}
+        {include: "sign"}
     ]
 }
