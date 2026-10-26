@@ -130,7 +130,9 @@ print "Done"
   - `RANDOM`: Generates a random hex float in `[0, 1)` with 64-digit precision.
   - `TIME`: Current Unix timestamp.
   - `RANDINT{a}{b}`: Generates a random integer in `[min(a,b), max(a,b)]`. Decimals truncate.
+  - `LG3` (log10 3), `LG7` (log10 7), `GAMMA` (Euler-Mascheroni constant).
 - **Arbitrary Precision**: Non-terminating fractions are truncated to 64 hex digits.
+
 
 ## Output
 - `print ...`: Outputs bytes/strings using the `using` encoding. Non-printable ints output NUL.
@@ -172,6 +174,7 @@ print "Done"
 - `a&toString`: Convert number to string.
 - `s&toLowerCase`: Converts ASCII A-Z to lowercase.
 - `s&toUpperCase`: Converts ASCII a-z to uppercase.
+- `s&fullmatch{"regex"}`: Returns `1` if the string completely matches the JS regex, else `0`.
 - String escapes: `\b`, `\a`, `\n`, `\t`, `\r`, `\\`, `\"`, `\xNN`.
 
 ## Arithmetic & Math
@@ -199,6 +202,9 @@ print "Done"
 ## Control Flow
 - `if-eq A B ... endif` OR `if-eq A B ... endif-else ... endelse`
 - `while-eq A B ... endwhile`
+- `if-<type>` or `while-<type>`, the `type` can be:
+  + 2 inputs: `eq ne lt le gt ge` + `A B`
+  + 1 inputs: `isTrue isFalse` + `A`
 - `loop N ... endloop`
 - `break` / `continue`
 - `label #name` / `goto #name`
