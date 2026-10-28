@@ -118,6 +118,23 @@ sleep-s 2.5        // Blocks the browser for 2.5 seconds
 print "Done"
 ```
 
+## Lesson 8: Functions and Pointers
+Functions in Hexline are fully isolated. When you call a function, it takes a deep copy of all global variables. This means unless you explicitly use pointers, your function cannot alter the outside world.
+
+```text
+using utf-8
+def a $5
+
+func %addToGlobal 'x
+  def *a 0        // * forces modification of the global 'a'
+  add *a *'x      // *'x accesses the pointer to the passed argument
+endfunc
+
+user::addToGlobal a // passes 'a' by reference
+printnum a          // Outputs 5 + 0 = 5
+```
+*(Wait, in the example above, `a` was passed as an argument and accessed via `*'x`. This shows how to pass by reference).*
+
 ---
 
 # Complete Language Reference
@@ -131,8 +148,8 @@ print "Done"
   - `TIME`: Current Unix timestamp.
   - `RANDINT{a}{b}`: Generates a random integer in `[min(a,b), max(a,b)]`. Decimals truncate.
   - `LG3` (log10 3), `LG7` (log10 7), `GAMMA` (Euler-Mascheroni constant).
+  - `SQRT2`, `SQRT3`, `SQRT5`, `PHI`, `LG2` (64 hex digits).
 - **Arbitrary Precision**: Non-terminating fractions are truncated to 64 hex digits.
-
 
 ## Output
 - `print ...`: Outputs bytes/strings using the `using` encoding. Non-printable ints output NUL.
@@ -148,6 +165,13 @@ print "Done"
 - `del a`: Delete a variable.
 - `swap a b`: Swap the values of `a` and `b` (errors if types differ).
 - `area ... endarea`: Dynamic scope block.
+
+## Functions
+- `func %name 'v1 'v2 ... endfunc`: Defines a void function. `'v1` declares a local parameter copy.
+- `user::name arg1 arg2`: Calls a function. Passing literals restricts `*'v1` modifications.
+- `*a`: Access/Modify the global variable `a` from inside a function.
+- `'v1`: Access the parameter copy.
+- `*'v1`: Access/Modify the actual argument passed to the function (by reference).
 
 ## Arrays
 - `append arr x`: Append `x` to the array.
@@ -186,16 +210,14 @@ print "Done"
 - `abs/floor/ceil/round/dot a`: `dot` clears the integer part.
 - `lg/ln/log2 a`, `log a b`, `sin/cos/tan/arcsin/arccos/arctan a`
 - `sinh/cosh/tanh/arsinh/arcosh/artanh a`, `exp/ten a`
-- `usingrad` / `usingdeg`
+- `usingrad` / `usingdeg` / `usinggrad`
 - `percent a`: \(a / 100\)
 - `sn a b c`: Scientific notation, \(a = b \times 10^c\).
 - `sqrt/square/cube/cbrt a`: Square root, square, cube, cube root.
 - `root a b`: Root of \(a\) with degree \(b\) (real part only).
 - `fact a`: Factorial (errors if not non-negative integer).
 - `pol a b c`: Polar radius, \(a = \sqrt{b^2 + c^2}\).
-- `usinggrad`: Switch trig mode to gradians.
 - `cot/coth/arccot/arcoth a`: Cotangent functions.
-- Built-in constants: `SQRT2`, `SQRT3`, `SQRT5`, `PHI`, `LG2` (64 hex digits).
 - `sec/csc/arcsec/arccsc/sech/csch/arsech/arcsch a`: Secant and cosecant functions.
 - `versin/coversin/exsec/excsc/haversin a`: Historical trigonometric functions.
 
