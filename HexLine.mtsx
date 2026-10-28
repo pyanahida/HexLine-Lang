@@ -11,6 +11,7 @@
     styles: [
         "encode" > "constant" @I
         "sign"   > "keyword"  @B
+        "range"  > "label"    @B
     ]
     
     comment: {startsWith: "//"}
@@ -43,7 +44,7 @@
                     "abs floor ceil round dot" +
                     "and or not xor nand nor xnor" +
                     "lg ln log2 log exp ten percent sn sqrt cbrt square cube root" +
-                    "label goto" +
+                    "label goto func endfunc" +
                     "loop endloop endif endwhile endif-else endelse" +
                     "defarr defstrarr append allclear exchange sum prod" +
                     "concat break continue" +
@@ -152,3 +153,41 @@
             match: /#[a-zA-Z_][0-9a-zA-Z_]*\b/
             0: "label"
         }
+        // Signs
+        "sign": {
+            match: /[+](?=\n)/
+            0: "sign"
+        }
+        // Functions
+        "func": [
+            {
+                match: /(user::)([0-9a-zA-Z_]+)\b/
+                1: "range"
+                2: "keyword2"
+            }
+            {
+                start: {match: /(?<=\n)func\s+[A-Za-z0-9_]+/}
+                end: {match: /(?<=\n)endfunc/}
+                contains: [
+                    {
+                    match: /(\*|'|\*')(?=[A-Za-z0-9_])/
+                    0: "sign"
+                    }
+                ]
+            }
+        ]
+    ]
+    contains: [
+        {include: "string"}
+        {include: "number"}
+        {include: "encode"}
+        {include: "keyword"}
+        {include: "method"}
+        {include: "brace"}
+        // {include: "inputnum"}
+        {include: "const"}
+        {include: "label"}
+        {include: "sign"}
+        {include: "func"}
+    ]
+}
