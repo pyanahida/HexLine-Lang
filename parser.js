@@ -1,6 +1,7 @@
 let currentEncoding = 'utf-8';
 let currentProg = [];
 let currentMatch = {};
+let functionsMap = {};
 
 function parse(src) {
   const rawLines = src.split(/\r?\n/);
@@ -11,7 +12,7 @@ function parse(src) {
   if (!validEncodings.includes(encoding)) return { err: `unsupported encoding: ${encoding}` };
   
   const prog = [];
-  for (let i = 1; i < rawLines.length; i++) {
+  for (let i = 1; < rawLines.length; i++) {
     let line = rawLines[i];
     const c = line.indexOf('//');
     if (c >= 0) line = line.slice(0, c);
@@ -101,13 +102,13 @@ function splitArgs(str) {
   return args;
 }
 
-function getVal(tok) {
+function getVal(tok, context = vars) {
   if (isLiteral(tok)) return parseLiteral(tok);
   
   if (tok.endsWith('&toString')) {
     const varName = tok.slice(0, -9);
-    if (varName in vars && vars[varName] instanceof BigHex) {
-      let str = vars[varName].toString();
+    if (varName in context && context[varName] instanceof BigHex) {
+      let str = context[varName].toString();
       return encodeText(str, currentEncoding);
     }
     return null;
@@ -116,8 +117,8 @@ function getVal(tok) {
   if (tok.endsWith('&toLowerCase') || tok.endsWith('&toUpperCase')) {
     const isLower = tok.endsWith('&toLowerCase');
     const varName = isLower ? tok.slice(0, -12) : tok.slice(0, -12);
-    if (varName in vars && vars[varName] instanceof Uint8Array) {
-      const arr = vars[varName];
+    if (varName in context && context[varName] instanceof Uint8Array) {
+      const arr = context[varName];
       const newArr = new Uint8Array(arr.length);
       for (let i = 0; i < arr.length; i++) {
         let b = arr[i];
@@ -135,22 +136,20 @@ function getVal(tok) {
     if (match) {
       const varName = match[1];
       let regTok = match[2];
-      if (!(vars[varName] instanceof Uint8Array)) return null;
+      if (!(context[varName] instanceof Uint8Array)) return null;
       
       let regStr = "";
       if (regTok.startsWith('"') && regTok.endsWith('"')) {
         regStr = new TextDecoder(currentEncoding).decode(parseStrLiteral(regTok));
-      } else if (regTok in vars && vars[regTok] instanceof Uint8Array) {
-        regStr = new TextDecoder(currentEncoding).decode(vars[regTok]);
+      } else if (regTok in context && context[regTok] instanceof Uint8Array) {
+        regStr = new TextDecoder(currentEncoding).decode(context[regTok]);
       }
       
       try {
-        let srcStr = new TextDecoder(currentEncoding).decode(vars[varName]);
+        let srcStr = new TextDecoder(currentEncoding).decode(context[varName]);
         let re = new RegExp("^(?:" + regStr + ")$");
         return new BigHex(re.test(srcStr) ? 1 : 0);
-      } catch(e) {
-        throw new Error("invalid regex");
-      }
+      } catch(e) { throw new Error("invalid regex"); }
     }
     return null;
   }
@@ -160,7 +159,7 @@ function getVal(tok) {
     if (match) {
       let vals = [match[1], match[2], match[3] || '$1'].map(t => {
         if (t.startsWith('$')) return new BigHex(t.slice(1));
-        if (t in vars && vars[t] instanceof BigHex) return vars[t];
+        if (t in context && context[t] instanceof BigHex) return context[t];
         return null;
       });
       if (vals[0] && vals[1] && vals[2]) {
@@ -185,10 +184,10 @@ function getVal(tok) {
       let tokA = match[1], tokB = match[2];
       
       if (tokA.startsWith('$')) vA = new BigHex(tokA.slice(1));
-      else if (tokA in vars && vars[tokA] instanceof BigHex) vA = vars[tokA];
+      else if (tokA in context && context[tokA] instanceof BigHex) vA = context[tokA];
       
       if (tokB.startsWith('$')) vB = new BigHex(tokB.slice(1));
-      else if (tokB in vars && vars[tokB] instanceof BigHex) vB = vars[tokB];
+      else if (tokB in context && context[tokB] instanceof BigHex) vB = context[tokB];
       
       if (vA && vB) {
         let nA = vA.toNumber(), nB = vB.toNumber();
@@ -208,25 +207,21 @@ function getVal(tok) {
     if (match) {
       const varName = match[1];
       let divTok = match[2];
-      if (!(vars[varName] instanceof Uint8Array)) return null;
+      if (!(context[varName] instanceof Uint8Array)) return null;
       
       let divStr = "";
       if (divTok.startsWith('"') && divTok.endsWith('"')) {
         divStr = new TextDecoder(currentEncoding).decode(parseStrLiteral(divTok));
-      } else if (divTok in vars && vars[divTok] instanceof Uint8Array) {
-        divStr = new TextDecoder(currentEncoding).decode(vars[divTok]);
-      } else {
-        divStr = divTok;
-      }
+      } else if (divTok in context && context[divTok] instanceof Uint8Array) {
+        divStr = new TextDecoder(currentEncoding).decode(context[divTok]);
+      } else { divStr = divTok; }
       
-      let srcStr = new TextDecoder(currentEncoding).decode(vars[varName]);
+      let srcStr = new TextDecoder(currentEncoding).decode(context[varName]);
       let parts = [];
       if (divStr === "") {
         parts = srcStr.trim().split(/\s+/);
         if (parts.length === 1 && parts[0] === "") parts = [];
-      } else {
-        parts = srcStr.split(divStr);
-      }
+      } else { parts = srcStr.split(divStr); }
       
       return parts.map(p => encodeText(p, currentEncoding));
     }
@@ -240,19 +235,19 @@ function getVal(tok) {
       let indexTok = match[2];
       let idxVal = null;
       if (indexTok.startsWith('$')) idxVal = new BigHex(indexTok.slice(1));
-      else if (indexTok in vars) { if (vars[indexTok] instanceof BigHex) idxVal = vars[indexTok]; }
+      else if (indexTok in context) { if (context[indexTok] instanceof BigHex) idxVal = context[indexTok]; }
       
       if (idxVal) {
         let idxNum = idxVal.toNumber();
         let index = idxNum < 0 ? Math.ceil(idxNum) : Math.floor(idxNum);
         
-        if (vars[varName] instanceof Uint8Array) {
-          const arr = vars[varName];
+        if (context[varName] instanceof Uint8Array) {
+          const arr = context[varName];
           let targetIdx = index >= 0 ? index : arr.length + index;
           return (targetIdx >= 0 && targetIdx < arr.length) ? new BigHex(arr[targetIdx]) : new BigHex(-1);
         }
-        else if (Array.isArray(vars[varName])) {
-          const arr = vars[varName];
+        else if (Array.isArray(context[varName])) {
+          const arr = context[varName];
           let targetIdx = index >= 0 ? index : arr.length + index;
           if (targetIdx < 0 || targetIdx >= arr.length) throw new Error('index out of bounds');
           return arr[targetIdx];
@@ -264,8 +259,8 @@ function getVal(tok) {
   
   if (tok.endsWith('&randitem')) {
     const varName = tok.slice(0, -9);
-    if (varName in vars && Array.isArray(vars[varName])) {
-      const arr = vars[varName];
+    if (varName in context && Array.isArray(context[varName])) {
+      const arr = context[varName];
       if (arr.length === 0) throw new Error('randitem on empty array');
       const randIdx = Math.floor(Math.random() * arr.length);
       return arr[randIdx];
@@ -275,11 +270,11 @@ function getVal(tok) {
   
   if (tok.endsWith('&len')) {
     const varName = tok.slice(0, -4);
-    if (varName in vars && Array.isArray(vars[varName])) {
-      return new BigHex(vars[varName].length);
+    if (varName in context && Array.isArray(context[varName])) {
+      return new BigHex(context[varName].length);
     }
-    if (varName in vars && vars[varName] instanceof Uint8Array) {
-      return new BigHex(vars[varName].length);
+    if (varName in context && context[varName] instanceof Uint8Array) {
+      return new BigHex(context[varName].length);
     }
     return null;
   }
@@ -291,10 +286,10 @@ function getVal(tok) {
       let valTok = match[2];
       let targetVal = null;
       if (valTok.startsWith('$')) targetVal = new BigHex(valTok.slice(1));
-      else if (valTok in vars && vars[valTok] instanceof BigHex) targetVal = vars[valTok];
+      else if (valTok in context && context[valTok] instanceof BigHex) targetVal = context[valTok];
       
-      if (targetVal && Array.isArray(vars[varName])) {
-        const arr = vars[varName];
+      if (targetVal && Array.isArray(context[varName])) {
+        const arr = context[varName];
         const found = arr.some(item => item.toString() === targetVal.toString());
         return new BigHex(found ? 1 : 0);
       }
@@ -309,10 +304,10 @@ function getVal(tok) {
       let valTok = match[2];
       let targetVal = null;
       if (valTok.startsWith('$')) targetVal = new BigHex(valTok.slice(1));
-      else if (valTok in vars && vars[valTok] instanceof BigHex) targetVal = vars[valTok];
+      else if (valTok in context && context[valTok] instanceof BigHex) targetVal = context[valTok];
       
-      if (targetVal && Array.isArray(vars[varName])) {
-        const arr = vars[varName];
+      if (targetVal && Array.isArray(context[varName])) {
+        const arr = context[varName];
         for (let i = 0; i < arr.length; i++) {
           if (arr[i].toString() === targetVal.toString()) return new BigHex(i);
         }
@@ -327,8 +322,8 @@ function getVal(tok) {
     if (match) {
       const varName = match[1];
       let findTok = match[2];
-      if (!(vars[varName] instanceof Uint8Array)) return null;
-      const arr = vars[varName];
+      if (!(context[varName] instanceof Uint8Array)) return null;
+      const arr = context[varName];
       
       let targetBytes = null;
       if (findTok.startsWith('"')) {
@@ -336,7 +331,7 @@ function getVal(tok) {
       } else {
         let v = null;
         if (findTok.startsWith('$')) v = new BigHex(findTok.slice(1));
-        else if (findTok in vars && vars[findTok] instanceof BigHex) v = vars[findTok];
+        else if (findTok in context && context[findTok] instanceof BigHex) v = context[findTok];
         
         if (v) {
           let num = v.toNumber();
@@ -368,12 +363,12 @@ function getVal(tok) {
       let sepStr = "";
       if (sepTok.startsWith('"') && sepTok.endsWith('"')) {
         sepStr = new TextDecoder(currentEncoding).decode(parseStrLiteral(sepTok));
-      } else if (sepTok in vars && vars[sepTok] instanceof Uint8Array) {
-        sepStr = new TextDecoder(currentEncoding).decode(vars[sepTok]);
+      } else if (sepTok in context && context[sepTok] instanceof Uint8Array) {
+        sepStr = new TextDecoder(currentEncoding).decode(context[sepTok]);
       }
       
-      if (Array.isArray(vars[arrName])) {
-        let strs = vars[arrName].map(item => {
+      if (Array.isArray(context[arrName])) {
+        let strs = context[arrName].map(item => {
           if (item instanceof Uint8Array) return new TextDecoder(currentEncoding).decode(item);
           return item.toString();
         });
@@ -384,15 +379,28 @@ function getVal(tok) {
     }
   }
 
-  if (tok in vars) return vars[tok];
+  if (tok in context) return context[tok];
   return null;
 }
 
 function buildMatches(prog) {
   const map = {}, stack = [];
+  const funcs = {};
   for (let i = 0; i < prog.length; i++) {
     const t = splitArgs(prog[i].text)[0];
-    if (/^if-(eq|ne|gt|ge|lt|le)$/.test(t) || t === 'if-isTrue' || t === 'if-isFalse') stack.push({ type: 'if', i });
+    
+    if (t === 'func') {
+      const name = splitArgs(prog[i].text)[1]; // %name
+      if (!name || !name.startsWith('%')) return { err: { line: prog[i].lineNo, msg: 'invalid func name' } };
+      stack.push({ type: 'func', i, name });
+    }
+    else if (t === 'endfunc') {
+      const top = stack.pop();
+      if (!top || top.type !== 'func') return { err: { line: prog[i].lineNo, msg: 'mismatched ' + t } };
+      map[top.i] = i; map[i] = top.i;
+      funcs[top.name] = top.i;
+    }
+    else if (/^if-(eq|ne|gt|ge|lt|le)$/.test(t) || t === 'if-isTrue' || t === 'if-isFalse') stack.push({ type: 'if', i });
     else if (/^while-(eq|ne|gt|ge|lt|le)$/.test(t) || t === 'while-isTrue' || t === 'while-isFalse') stack.push({ type: 'while', i });
     else if (t === 'loop') stack.push({ type: 'loop', i });
     else if (t === 'area') stack.push({ type: 'area', i });
@@ -416,7 +424,7 @@ function buildMatches(prog) {
     }
   }
   if (stack.length) return { err: { line: prog[stack[stack.length - 1].i].lineNo, msg: 'unclosed block' } };
-  return map;
+  return { map, funcs };
 }
 
 function cmp(op, a, b) {
