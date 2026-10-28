@@ -44,7 +44,7 @@
                     "abs floor ceil round dot" +
                     "and or not xor nand nor xnor" +
                     "lg ln log2 log exp ten percent sn sqrt cbrt square cube root" +
-                    "label goto func endfunc" +
+                    "label goto" +
                     "loop endloop endif endwhile endif-else endelse" +
                     "defarr defstrarr append allclear exchange sum prod" +
                     "concat break continue" +
@@ -166,13 +166,22 @@
                 2: "keyword2"
             }
             {
-                start: {match: /(?<=\n)func\s+[A-Za-z0-9_]+/}
-                end: {match: /(?<=\n)endfunc/}
+                start: {match: /(?<=\n)(func)\s+(%[A-Za-z0-9_]+)\b/, 1: "keyword", 2: "keyword2"}
+                end: {match: /(?<=\n)endfunc/, 0: "keyword"}
                 contains: [
                     {
                     match: /(\*|'|\*')(?=[A-Za-z0-9_])/
                     0: "sign"
                     }
+                    {include: "string"}
+                    {include: "number"}
+                    {include: "encode"}
+                    {include: "keyword"}
+                    {include: "method"}
+                    {include: "brace"}
+                    {include: "const"}
+                    {include: "label"}
+                    {include: "sign"}
                 ]
             }
         ]
